@@ -1,0 +1,8 @@
+# .NET 构建产物
+bin/
+obj/
+*.user
+.vs/
+
+# 设计器测试产生的临时工程文件
+sample/sample1.hmijob
