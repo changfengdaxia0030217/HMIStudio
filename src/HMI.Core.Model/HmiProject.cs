@@ -15,8 +15,11 @@ public sealed class RuntimeStats
 /// <summary>HMI 组态工程（设计时模型与运行时渲染模型的契约承载，§1.2 设计/运行隔离）。</summary>
 public sealed class HmiProject
 {
+    public const int CurrentFormatVersion = 1;
     /// <summary>工程版本标记（§9.4）。</summary>
     public string Version { get; set; } = "1.0.0";
+    /// <summary>工程文件格式版本，与面向用户的 Version 分离；当前格式为 1。</summary>
+    public int FormatVersion { get; set; } = 1;
     /// <summary>启动画面 Id（§8.1）。</summary>
     public string StartScreenId { get; set; } = string.Empty;
     /// <summary>工程全局基准分辨率宽（普通/导航画面沿用，§8.1）。</summary>
