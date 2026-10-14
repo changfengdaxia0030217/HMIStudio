@@ -13,6 +13,10 @@ public sealed class ProjectStorage : IProjectStorage
         var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
         var project = HmiJson.Deserialize(json)
             ?? throw new InvalidDataException($"工程解析失败: {path}");
+        if (project.FormatVersion > HmiProject.CurrentFormatVersion)
+            throw new InvalidDataException($"工程格式版本 {project.FormatVersion} 高于当前支持版本 {HmiProject.CurrentFormatVersion}，请使用较新版本的 HMIStudio 打开。");
+        if (project.FormatVersion < 1)
+            throw new InvalidDataException($"工程格式版本无效: {project.FormatVersion}");
         return project;
     }
 
