@@ -5,7 +5,7 @@ namespace HMI.Core.Model;
 public sealed class PropertyBindingInfo
 {
     /// <summary>唯一属性值源；静态值也通过 $static 表达，不再为不同类型维护多套绑定字段。</summary>
-    public PropertySource? Source { get; set; } = new StaticPropertySource();
+    public IPropertySource? Source { get; set; } = new StaticPropertySource();
     /// <summary>绑定方向预留：单向读值或双向写回。</summary>
     public PropertyBindingDirection Direction { get; set; } = PropertyBindingDirection.OneWay;
     /// <summary>依赖变量列表，可由设计器/编译校验器生成或刷新。</summary>
