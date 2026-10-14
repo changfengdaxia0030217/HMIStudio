@@ -1237,3 +1237,21 @@ EtherNet/IP(CIP) 适用于支持 CIP 的汇川型号；对仅支持 ModbusTCP �
 9. **术语消歧**：驱动这套自动产数据的能力统一叫「**值生成策略**」，不用"模拟器"一词；「**变量模拟器**」专指 §7.19 的**设计期**手动工具，两者互不依赖。
 
 **落点**：驱动载体 **M1**（`MockPlcDriver`，见 M1 任务 2）；离线模式开关（配置入口）**M2**；相机离线模拟 **M5**（见 §7.16）；界面状态提示 **M3**（见 M3 任务 2）。
+
+## M0 执行记录（2026-10-15）
+
+本次在分支 `feature/m0-core-contracts` 开始落实 M0 契约，依据 NEXT HMI 的 B2/B3/B4 与 KPHK 的写入门禁方向取长补短，未复制参考项目代码。
+
+已完成的首批改动：
+- 三个现有 Core 项目目标框架从 `net8.0` 调整为用户已确认的 `.NET 10`。
+- 新增 `HmiProject.FormatVersion` 整数格式版本与 `CurrentFormatVersion`；加载时拒绝不支持的格式，校验时报告格式版本问题。
+- 变量元数据新增 `Min` / `Max`，并提供与实时值分离的 `IVariableMetadataProvider` / `VariableMetadataSnapshot`。
+- 写入契约返回 `WriteResult`，包含稳定原因码和 `RequestId`；变量池执行只读拦截，并避免写入操作错误地把 PLC/相机变量质量位改成 Good。
+- 值更新包将单一时间戳拆为可空的 `DeviceTimestamp` 与 UTC `ServerTimestamp`。
+- 工程校验补充格式版本、量程上下界、刷新周期检查。
+
+待继续完成：
+- 统一属性值源 `IPropertySource`（静态值、变量、表达式、条件值及组件/Repeater 源）。
+- 补充自动化测试并执行 Windows/.NET 10 构建验证；当前仅完成仓库级编辑，尚未声称构建通过。
+- M1 修复订阅引用计数/空轮询组、隔离消费者异常，并实现 Mock PLC 驱动与通讯质量状态。
+- 写入来源目前作为契约参数预留，细粒度来源门禁仍需后续实现，不能视为已完成权限控制。
