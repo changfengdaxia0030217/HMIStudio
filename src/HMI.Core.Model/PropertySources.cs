@@ -15,12 +15,12 @@ namespace HMI.Core.Model;
 [JsonDerivedType(typeof(ComponentPropertySource), "$componentProp")]
 [JsonDerivedType(typeof(WidgetPropertySource), "$widgetProp")]
 [JsonDerivedType(typeof(RepeatItemPropertySource), "$repeatItem")]
-public abstract class PropertySource
+public interface IPropertySource
 {
 }
 
 /// <summary>常量/字面值来源。</summary>
-public sealed class StaticPropertySource : PropertySource
+public sealed class StaticPropertySource : IPropertySource
 {
     public object? Value { get; set; }
 }
@@ -41,9 +41,9 @@ public sealed class ExpressionPropertySource : PropertySource
 /// <summary>条件选择来源。</summary>
 public sealed class ConditionalPropertySource : PropertySource
 {
-    public PropertySource? Condition { get; set; }
-    public PropertySource? WhenTrue { get; set; }
-    public PropertySource? WhenFalse { get; set; }
+    public IPropertySource? Condition { get; set; }
+    public IPropertySource? WhenTrue { get; set; }
+    public IPropertySource? WhenFalse { get; set; }
 }
 
 /// <summary>数值算术来源；表达式求值器将在后续阶段实现并限制可用运算。</summary>
