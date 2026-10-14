@@ -30,7 +30,7 @@ public interface IVariablePool : IVariableValueProvider
     Task<object?> ReadAsync(string varId, CancellationToken ct = default);
 
     /// <summary>异步写变量。写请求进入全量串行写队列，保序、保重试（§3.4 / §14.2）。</summary>
-    Task WriteAsync(string varId, object? value, CancellationToken ct = default);
+    Task<WriteResult> WriteAsync(string varId, object? value, CancellationToken ct = default, WriteSource source = WriteSource.Runtime, string? requestId = null);
 
     /// <summary>读取变量当前质量位。</summary>
     VariableQuality GetQuality(string varId);
