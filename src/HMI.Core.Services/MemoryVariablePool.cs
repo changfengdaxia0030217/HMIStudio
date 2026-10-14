@@ -30,7 +30,7 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
     private readonly Task _writeLoop;
 
     private sealed record WriteRequest(
-        string VarId, object? Value, VariableQuality Quality, TaskCompletionSource Tcs)
+        string VarId, object? Value, WriteSource Source, string RequestId, TaskCompletionSource<WriteResult> Tcs)
     {
         public DateTimeOffset EnqueuedAt { get; } = DateTimeOffset.Now;
     }
@@ -98,14 +98,28 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async Task WriteAsync(string varId, object? value, CancellationToken ct = default)
+    public async Task<WriteResult> WriteAsync(string varId, object? value, CancellationToken ct = default, WriteSource source = WriteSource.Runtime, string? requestId = null)
     {
-        if (!_slots.TryGetValue(varId, out _))
-            return;
+        if (!_slots.ContainsKey(varId))
+            return new WriteResult(false, WriteFailureReason.NotExist, requestId ?? Guid.NewGuid().ToString("N"), $"变量不存在: {varId}");
+        if (_metas.TryGetValue(varId, out var meta) && meta.IsReadOnly)
+            return new WriteResult(false, WriteFailureReason.ReadOnly, requestId ?? Guid.NewGuid().ToString("N"), $"变量只读: {varId}");
 
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await _writeQueue.Writer.WriteAsync(new WriteRequest(varId, value, VariableQuality.Good, tcs), ct);
-        await tcs.Task.WaitAsync(ct);
+        var id = requestId ?? Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<WriteResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await _writeQueue.Writer.WriteAsync(new WriteRequest(varId, value, source, id, tcs), ct);
+            return await tcs.Task.WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return new WriteResult(false, WriteFailureReason.Cancelled, id, "写入已取消");
+        }
+        catch (Exception ex)
+        {
+            return new WriteResult(false, WriteFailureReason.DriverError, id, ex.Message);
+        }
     }
 
     /// <inheritdoc/>
@@ -136,7 +150,7 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    req.Tcs.TrySetException(ex);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, ex.Message));
                 }
             }
         }
@@ -145,17 +159,26 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
     /// <summary>处理单条写请求：直接落值并广播（纯 FIFO 串行，§14.2 默认 Strict）。</summary>
     private void HandleWrite(WriteRequest req)
     {
-        ApplyWrite(req.VarId, req.Value, req.Quality);
-        req.Tcs.TrySetResult();
+        if (!_slots.ContainsKey(req.VarId))
+        {
+            req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.NotExist, req.RequestId, $"变量不存在: {req.VarId}"));
+            return;
+        }
+        if (_metas.TryGetValue(req.VarId, out var meta) && meta.IsReadOnly)
+        {
+            req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.ReadOnly, req.RequestId, $"变量只读: {req.VarId}"));
+            return;
+        }
+        ApplyWrite(req.VarId, req.Value);
+        req.Tcs.TrySetResult(new WriteResult(true, WriteFailureReason.None, req.RequestId, "写入成功"));
     }
 
-    private void ApplyWrite(string varId, object? value, VariableQuality quality)
+    private void ApplyWrite(string varId, object? value)
     {
         if (!_slots.TryGetValue(varId, out var slot)) return;
         lock (slot.Sync)
         {
             slot.Value = value;
-            slot.Quality = quality;
             // 不广播：通知统一由订阅层按 CycleMs 轮询送出（UI 唯一出口）。
         }
     }
