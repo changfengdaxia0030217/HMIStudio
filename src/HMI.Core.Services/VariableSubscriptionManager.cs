@@ -136,7 +136,7 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
 
     private void Emit(string varId, object? value, VariableQuality quality)
     {
-        var package = new VariableValuePackage { VarId = varId, Value = value, Quality = quality, Timestamp = DateTimeOffset.Now };
+        var package = new VariableValuePackage { VarId = varId, Value = value, Quality = quality, ServerTimestamp = DateTimeOffset.UtcNow };
         foreach (var list in _consumers.Values)
         {
             Action<VariableValuePackage>[] snapshot;
