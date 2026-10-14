@@ -1251,7 +1251,7 @@ EtherNet/IP(CIP) 适用于支持 CIP 的汇川型号；对仅支持 ModbusTCP �
 - 工程校验补充格式版本、量程上下界、刷新周期检查。
 
 待继续完成：
-- 统一属性值源 `IPropertySource`（静态值、变量、表达式、条件值及组件/Repeater 源）。
+- 已定义统一属性值源 `IPropertySource` 的多态 JSON 契约：`$static`、`$var`、`$expr`、`$if`、`$formula`、`$componentProp`、`$widgetProp`、`$repeatItem`，并在属性绑定中预留单向/双向方向字段；解析器、字段类型过滤与设计器 UI 留待后续阶段。
 - 补充自动化测试并执行 Windows/.NET 10 构建验证；当前仅完成仓库级编辑，尚未声称构建通过。
 - M1 修复订阅引用计数/空轮询组、隔离消费者异常，并实现 Mock PLC 驱动与通讯质量状态。
 - 写入来源目前作为契约参数预留，细粒度来源门禁仍需后续实现，不能视为已完成权限控制。
