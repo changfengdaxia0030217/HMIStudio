@@ -12,7 +12,7 @@ namespace HMI.Core.Services;
 /// IVariableSubscribeManager.RegisterPollingConsumer。服务端内部如需"值一变就反应"的边沿触发，
 /// 须另建内部通道，勿恢复本类广播。
 /// </summary>
-public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
+public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvider, IAsyncDisposable
 {
     /// <summary>变量槽：可变（写时真正落值），内置细粒度锁对象（§3.6）。</summary>
     private sealed class Slot
@@ -74,6 +74,13 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
 
     /// <summary>按变量 Id 读取元数据（供订阅管理器按 CycleMs 分组）。</summary>
     public IReadOnlyDictionary<string, VariableMeta> Metas => _metas;
+
+    /// <summary>生成权威元数据快照；Writable 从 IsReadOnly 派生，避免重复持久化状态。</summary>
+    public IReadOnlyCollection<VariableMetadataSnapshot> GetMetadataSnapshot()
+        => _metas.Values
+            .OrderBy(meta => meta.VarId, StringComparer.Ordinal)
+            .Select(meta => new VariableMetadataSnapshot(meta.VarId, meta.Name, meta.DataType, meta.Min, meta.Max, !meta.IsReadOnly, meta.CycleMs))
+            .ToArray();
 
     /// <inheritdoc/>
     public bool TryGetValue(string varId, out object? value)
