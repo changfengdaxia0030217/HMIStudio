@@ -11,7 +11,9 @@ public sealed class VariableValuePackage
     /// <summary>质量位（§3.7）。</summary>
     public VariableQuality Quality { get; init; }
     /// <summary>采集时间戳。</summary>
-    public DateTimeOffset Timestamp { get; init; }
+    public DateTimeOffset? DeviceTimestamp { get; init; }
+    /// <summary>服务端收到/更新该值的时间戳（UTC）。</summary>
+    public DateTimeOffset ServerTimestamp { get; init; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>表达式引擎读取变量值的隔离接口（§11 IVariableValueProvider）。</summary>
