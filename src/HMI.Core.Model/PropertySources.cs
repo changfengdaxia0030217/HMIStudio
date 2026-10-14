@@ -26,20 +26,20 @@ public sealed class StaticPropertySource : IPropertySource
 }
 
 /// <summary>变量值来源，可选数组/集合索引。</summary>
-public sealed class VariablePropertySource : PropertySource
+public sealed class VariablePropertySource : IPropertySource
 {
     public string VarId { get; set; } = string.Empty;
     public int? Index { get; set; }
 }
 
 /// <summary>布尔表达式来源，沿用现有表达式语法。</summary>
-public sealed class ExpressionPropertySource : PropertySource
+public sealed class ExpressionPropertySource : IPropertySource
 {
     public string Expression { get; set; } = string.Empty;
 }
 
 /// <summary>条件选择来源。</summary>
-public sealed class ConditionalPropertySource : PropertySource
+public sealed class ConditionalPropertySource : IPropertySource
 {
     public IPropertySource? Condition { get; set; }
     public IPropertySource? WhenTrue { get; set; }
@@ -47,26 +47,26 @@ public sealed class ConditionalPropertySource : PropertySource
 }
 
 /// <summary>数值算术来源；表达式求值器将在后续阶段实现并限制可用运算。</summary>
-public sealed class FormulaPropertySource : PropertySource
+public sealed class FormulaPropertySource : IPropertySource
 {
     public string Expression { get; set; } = string.Empty;
 }
 
 /// <summary>读取父组件或动作传入的组件参数。</summary>
-public sealed class ComponentPropertySource : PropertySource
+public sealed class ComponentPropertySource : IPropertySource
 {
     public string PropertyName { get; set; } = string.Empty;
 }
 
 /// <summary>读取可复用控件/组件导出的属性。</summary>
-public sealed class WidgetPropertySource : PropertySource
+public sealed class WidgetPropertySource : IPropertySource
 {
     public string WidgetId { get; set; } = string.Empty;
     public string PropertyName { get; set; } = string.Empty;
 }
 
 /// <summary>读取 Repeater 当前复本的数据项或索引。</summary>
-public sealed class RepeatItemPropertySource : PropertySource
+public sealed class RepeatItemPropertySource : IPropertySource
 {
     public string Path { get; set; } = string.Empty;
     public bool RepeatIndex { get; set; }
