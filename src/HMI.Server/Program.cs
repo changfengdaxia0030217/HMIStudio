@@ -4,7 +4,10 @@ using HMI.Core.Interface;
 using HMI.Core.Model;
 using HMI.Server;
 
-var builder = WebApplication.CreateBuilder(args);
+var currentDirectory = Directory.GetCurrentDirectory();
+var projectDirectory = Path.Combine(currentDirectory, "src", "HMI.Server");
+var contentRoot = Directory.Exists(projectDirectory) ? projectDirectory : currentDirectory;
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = contentRoot });
 builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("HMISTUDIO_URLS") ?? "http://127.0.0.1:5080");
 builder.Services.AddSingleton<RuntimeProjectService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RuntimeProjectService>());
