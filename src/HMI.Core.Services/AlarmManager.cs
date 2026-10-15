@@ -27,8 +27,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath, Action<Exception>? onError)
     {
         _pool = pool;
-        _rules = rules.Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.Id) && !string.IsNullOrWhiteSpace(rule.VarId))
-            .ToArray();
+        _rules = ValidateRules(pool, rules);
         _connectionString = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(databasePath), Pooling = false }.ToString();
         _onError = onError;
         _changeLease = _pool.RegisterInternalChangeConsumer(package => _changes.Writer.TryWrite(package));
@@ -69,6 +68,44 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
             await manager.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static AlarmRule[] ValidateRules(MemoryVariablePool pool, IEnumerable<AlarmRule> rules)
+    {
+        var enabledRules = rules.Where(rule => rule.Enabled).ToArray();
+        var errors = new List<string>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var allowedOperators = new HashSet<string>(StringComparer.Ordinal)
+            { ">", ">=", "<", "<=", "==", "=", "!=", "<>" };
+
+        foreach (var rule in enabledRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.Id))
+                errors.Add("启用的报警规则必须设置 Id");
+            else if (!ids.Add(rule.Id.Trim()))
+                errors.Add($"报警规则 Id 重复: {rule.Id}");
+
+            if (string.IsNullOrWhiteSpace(rule.Name))
+                errors.Add($"报警规则 {rule.Id} 的名称不能为空");
+            if (string.IsNullOrWhiteSpace(rule.VarId))
+                errors.Add($"报警规则 {rule.Id} 的变量 Id 不能为空");
+            else if (!pool.Contains(rule.VarId))
+                errors.Add($"报警规则 {rule.Id} 引用了不存在的变量: {rule.VarId}");
+
+            if (string.IsNullOrWhiteSpace(rule.Operator) || !allowedOperators.Contains(rule.Operator.Trim()))
+                errors.Add($"报警规则 {rule.Id} 的比较运算符无效: {rule.Operator}");
+
+            var value = NormalizeRuleValue(rule.Value);
+            if (value is null || value is JsonElement { ValueKind: JsonValueKind.Array or JsonValueKind.Object })
+                errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或数字");
+            else if (TryNumber(value, out var number) && !double.IsFinite(number))
+                errors.Add($"报警规则 {rule.Id} 的数字比较值必须是有限数值");
+        }
+
+        if (errors.Count > 0)
+            throw new ArgumentException("报警规则校验失败: " + string.Join("；", errors), nameof(rules));
+
+        return enabledRules;
     }
 
     private async Task InitializeAsync(CancellationToken ct)
