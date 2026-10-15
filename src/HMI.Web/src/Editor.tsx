@@ -5,7 +5,7 @@ import "./runtime-screen.css";
 import { ControlRenderer, resolveControlProperty, type VariableMap } from "./ControlRenderer";
 import { CONTROL_REGISTRY, getControlDefinition } from "./ControlPropertyRegistry";
 
-const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://127.0.0.1:5080";
+const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 type Source = { type: "$static"; value?: unknown } | { type: "$var"; varId: string; index?: number } | { type: string; [key: string]: unknown };
 type Binding = { source?: Source | null; direction?: "OneWay" | "TwoWay"; dependencies?: string[]; mapping?: unknown[] };
 type Control = { id: string; name: string; controlType: string; x: number; y: number; width: number; height: number; properties: Record<string, Binding>; eventActions?: Record<string, unknown[]> };

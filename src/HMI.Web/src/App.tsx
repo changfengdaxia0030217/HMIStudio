@@ -8,7 +8,7 @@ import {
   SlidersHorizontal, Wifi, WifiOff, Zap,
 } from "lucide-react";
 
-const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://127.0.0.1:5080";
+const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 type Quality = "Good" | "BadComm" | "BadNotExist" | "Uncertain" | string;
 type Variable = {

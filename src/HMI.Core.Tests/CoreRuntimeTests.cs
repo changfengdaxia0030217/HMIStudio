@@ -132,7 +132,37 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
-    public async Task PermanentVariableRemainsPolledWithoutScreenSubscription()
+    public async Task SharedVariableRemainsPolledUntilLastSubscriptionIsReleased()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "temperature", Name = "Temperature", InitialValue = 21, CycleMs = 20 }
+        });
+        await using var manager = new VariableSubscriptionManager(pool);
+        var received = 0;
+        using var consumer = manager.RegisterPollingConsumer(_ => Interlocked.Increment(ref received));
+
+        await manager.SubscribeAsync(new[] { "temperature" });
+        await manager.SubscribeAsync(new[] { "temperature" });
+        await Task.Delay(100);
+        Assert.True(Volatile.Read(ref received) > 0);
+
+        await manager.UnsubscribeAsync(new[] { "temperature" });
+        await Task.Delay(80);
+        var countAfterFirstUnsubscribe = Volatile.Read(ref received);
+        await Task.Delay(80);
+        Assert.True(Volatile.Read(ref received) > countAfterFirstUnsubscribe);
+
+        await manager.UnsubscribeAsync(new[] { "temperature" });
+        await Task.Delay(60);
+        var countAfterLastUnsubscribe = Volatile.Read(ref received);
+        await Task.Delay(100);
+        Assert.Equal(countAfterLastUnsubscribe, Volatile.Read(ref received));
+    }
+
+    [Fact]
+    public async Task PermanentVariableRemainsPolledAfterSubscriptionIsReleased()
     {
         await using var pool = new MemoryVariablePool();
         pool.Register(new[]
@@ -143,10 +173,12 @@ public sealed class CoreRuntimeTests
         var received = 0;
         using var consumer = manager.RegisterPollingConsumer(_ => Interlocked.Increment(ref received));
 
+        await manager.SubscribeAsync(new[] { "heartbeat" });
         await Task.Delay(100);
-
         Assert.True(Volatile.Read(ref received) > 0);
+
         await manager.UnsubscribeAsync(new[] { "heartbeat" });
+        await Task.Delay(80);
         var countAfterUnsubscribe = Volatile.Read(ref received);
         await Task.Delay(80);
         Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe);

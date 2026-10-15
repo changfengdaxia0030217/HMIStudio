@@ -121,10 +121,21 @@ app.MapGet("/api/runtime/stream", async (HttpContext context, RuntimeProjectServ
 
 app.MapPost("/api/runtime/mock-values", (MockValueRequest request, RuntimeProjectService runtime) =>
 {
-    var driver = runtime.GetMockDriver(request.Protocol);
-    if (driver is null) return (IResult)Results.BadRequest(new { error = "模拟驱动不可用" });
-    driver.SetValue(request.Address, NormalizeJsonValue(request.Value));
-    return (IResult)Results.Ok(new { ok = true, request.Protocol, request.Address, request.Value });
+    if (string.IsNullOrWhiteSpace(request.Protocol))
+        return (IResult)Results.BadRequest(new { error = "协议名称不能为空" });
+
+    if (string.IsNullOrWhiteSpace(request.Address))
+        return (IResult)Results.BadRequest(new { error = "地址不能为空" });
+
+    var protocol = request.Protocol.Trim();
+    var address = request.Address.Trim();
+
+    var driver = runtime.GetMockDriver(protocol);
+    if (driver is null)
+        return (IResult)Results.BadRequest(new { error = "模拟驱动不可用", protocol });
+
+    driver.SetValue(address, NormalizeJsonValue(request.Value));
+    return (IResult)Results.Ok(new { ok = true, protocol, address, request.Value });
 });
 
 app.Run();

@@ -24,6 +24,52 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
 
     private readonly ConcurrentDictionary<string, Slot> _slots = new();
     private readonly ConcurrentDictionary<string, VariableMeta> _metas = new();
+    private readonly ConcurrentDictionary<Guid, Action<VariableValuePackage>> _internalConsumers = new();
+
+    private sealed class InternalConsumerLease : IDisposable
+    {
+        private readonly ConcurrentDictionary<Guid, Action<VariableValuePackage>> _consumers;
+        private readonly Guid _id;
+        public InternalConsumerLease(ConcurrentDictionary<Guid, Action<VariableValuePackage>> consumers, Guid id)
+        {
+            _consumers = consumers;
+            _id = id;
+        }
+        public void Dispose() => _consumers.TryRemove(_id, out _);
+    }
+
+    /// <summary>
+    /// 注册服务端内部变量变化消费者，与 UI 轮询订阅完全分离。
+    /// 仅当变量值或质量实际变化时通知。
+    /// </summary>
+    public IDisposable RegisterInternalChangeConsumer(Action<VariableValuePackage> consumer)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        var id = Guid.NewGuid();
+        _internalConsumers[id] = consumer;
+        return new InternalConsumerLease(_internalConsumers, id);
+    }
+
+    private void PublishInternalChange(string varId, Slot slot)
+    {
+        VariableValuePackage package;
+        lock (slot.Sync)
+        {
+            package = new VariableValuePackage
+            {
+                VarId = varId,
+                Value = slot.Value,
+                Quality = slot.Quality,
+                ServerTimestamp = DateTimeOffset.UtcNow
+            };
+        }
+
+        foreach (var consumer in _internalConsumers.Values)
+        {
+            try { consumer(package); }
+            catch { /* 一个内部消费者的异常不得中断变量写入或驱动采集。 */ }
+        }
+    }
     private readonly IPlcDriverManager? _driverManager;
 
     // 全量串行写队列（§14.2）：所有变量写汇入同一队列，保序、保重试。
@@ -292,11 +338,16 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     public void SetQuality(string varId, VariableQuality quality)
     {
         if (!_slots.TryGetValue(varId, out var slot)) return;
+        var changed = false;
         lock (slot.Sync)
         {
-            if (slot.Quality == quality) return;
-            slot.Quality = quality;
+            if (slot.Quality != quality)
+            {
+                slot.Quality = quality;
+                changed = true;
+            }
         }
+        if (changed) PublishInternalChange(varId, slot);
     }
 
     /// <summary>写循环（§14.2）：消费写队列，逐条落值并广播。全量串行、保序（默认 Strict 语义，每项都下发）。</summary>
@@ -378,11 +429,17 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     private void ApplyWrite(string varId, object? value)
     {
         if (!_slots.TryGetValue(varId, out var slot)) return;
+        var changed = false;
         lock (slot.Sync)
         {
-            slot.Value = value;
-            // 不广播：通知统一由订阅层按 CycleMs 轮询送出（UI 唯一出口）。
+            if (!Equals(slot.Value, value))
+            {
+                slot.Value = value;
+                changed = true;
+            }
+            // UI 仍只由 IVariableSubscribeManager 轮询分发。
         }
+        if (changed) PublishInternalChange(varId, slot);
     }
 
     public async ValueTask DisposeAsync()

@@ -23,33 +23,84 @@ public sealed class ProjectStorage : IProjectStorage
     /// <inheritdoc/>
     public async Task SaveAsync(string path, object project, CancellationToken ct = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(project);
+
+        // 先序列化，再写入目标文件同目录的临时文件，避免写入中断破坏原工程。
         var json = HmiJson.Serialize((HmiProject)project);
-        await File.WriteAllTextAsync(path, json, ct).ConfigureAwait(false);
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath)!;
+        Directory.CreateDirectory(directory);
+
+        var tempPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            // 临时文件与目标文件位于同一目录，避免跨卷移动。
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            // 清理失败不应覆盖原始保存异常。
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<string>> ValidateAsync(string path, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> ValidateAsync(string path, CancellationToken ct = default)
     {
         var errors = new List<string>();
         try
         {
-            var json = File.ReadAllText(path);
+            var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
             var p = HmiJson.Deserialize(json);
-            if (p is null) { errors.Add("工程为空或格式错误"); return Task.FromResult<IReadOnlyList<string>>(errors); }
-            if (p.FormatVersion > HmiProject.CurrentFormatVersion) errors.Add($"工程格式版本 {p.FormatVersion} 高于当前支持版本 {HmiProject.CurrentFormatVersion}");
-            if (p.FormatVersion < 1) errors.Add($"工程格式版本无效: {p.FormatVersion}");
+            if (p is null)
+            {
+                errors.Add("工程为空或格式错误");
+                return errors;
+            }
+
+            if (p.FormatVersion > HmiProject.CurrentFormatVersion)
+                errors.Add($"工程格式版本 {p.FormatVersion} 高于当前支持版本 {HmiProject.CurrentFormatVersion}");
+            if (p.FormatVersion < 1)
+                errors.Add($"工程格式版本无效: {p.FormatVersion}");
+
             if (string.IsNullOrWhiteSpace(p.StartScreenId) || !p.Screens.Any(s => s.Id == p.StartScreenId))
                 errors.Add("启动画面缺失");
+
             var ids = new HashSet<string>();
             foreach (var v in p.Variables)
             {
-                if (!ids.Add(v.VarId)) errors.Add($"变量 Id 重复: {v.VarId}");
+                if (!ids.Add(v.VarId))
+                    errors.Add($"变量 Id 重复: {v.VarId}");
                 if (v.Min.HasValue && v.Max.HasValue && v.Min.Value > v.Max.Value)
                     errors.Add($"变量 {v.VarId} 的最小值不能大于最大值");
-                if (v.CycleMs <= 0) errors.Add($"变量 {v.VarId} 的刷新周期必须大于 0");
+                if (v.CycleMs <= 0)
+                    errors.Add($"变量 {v.VarId} 的刷新周期必须大于 0");
             }
         }
-        catch (Exception ex) { errors.Add(ex.Message); }
-        return Task.FromResult<IReadOnlyList<string>>(errors);
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            errors.Add(ex.Message);
+        }
+
+        return errors;
     }
 }

@@ -1,3 +1,4 @@
+using HMI.Core.Interface;
 // HMI.Core.Model —— 工程 / 画面 / 运行时状态（§2.3 / §8.1 / §12）。
 namespace HMI.Core.Model;
 
@@ -30,6 +31,8 @@ public sealed class HmiProject
     public List<VariableMeta> Variables { get; set; } = new();
     /// <summary>画面清单。</summary>
     public List<HmiScreen> Screens { get; set; } = new();
+    /// <summary>报警规则清单；缺省为空以兼容已有工程。</summary>
+    public List<AlarmRule> AlarmRules { get; set; } = new();
     /// <summary>动作链清单（多个控件/任务复用，§6.2）。</summary>
     public List<ActionChain> ActionChains { get; set; } = new();
     /// <summary>运行统计。</summary>

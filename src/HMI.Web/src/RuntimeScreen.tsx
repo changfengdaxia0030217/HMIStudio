@@ -3,7 +3,7 @@ import { ArrowLeft, RefreshCw } from "lucide-react";
 import { ControlRenderer, type ScreenControl, type VariableMap } from "./ControlRenderer";
 import "./runtime-screen.css";
 
-const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://127.0.0.1:5080";
+const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 type Screen = { id: string; title: string; background: string; width: number; height: number; controls: ScreenControl[] };
 type Variable = { varId: string; name: string; value: unknown; quality?: string; writable?: boolean };
 export default function RuntimeScreen({ onBack, variables }: { onBack: () => void; variables: Variable[] }) {

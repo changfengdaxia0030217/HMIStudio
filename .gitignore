@@ -12,3 +12,7 @@ src/HMI.Server/data/
 # Generated frontend bundle and local runtime files
 src/HMI.Server/wwwroot/
 data/
+
+# Frontend generated dependencies and TypeScript build metadata
+src/HMI.Web/node_modules/
+src/HMI.Web/tsconfig.tsbuildinfo
