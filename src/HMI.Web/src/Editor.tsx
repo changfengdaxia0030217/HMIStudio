@@ -97,7 +97,11 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const response = await fetch(`${API}/api/screens/${encodeURIComponent(screen.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(screen) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "保存失败");
-      setDirty(false); setMessage("工程已保存到本机 JSON 文件。");
+      const verifyResponse = await fetch(`${API}/api/screens/${encodeURIComponent(screen.id)}`);
+      if (!verifyResponse.ok) throw new Error("保存请求已返回，但重新读取画面失败");
+      const persisted = await verifyResponse.json() as Screen;
+      setScreen({ ...persisted, controls: persisted.controls ?? [] });
+      setDirty(false); setMessage("工程已保存，并已重新读取验证。");
     } catch (e) { setMessage(e instanceof Error ? e.message : "保存失败"); }
     finally { setSaving(false); }
   };
