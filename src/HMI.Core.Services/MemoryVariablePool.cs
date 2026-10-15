@@ -198,7 +198,7 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
             _ => null
         };
 
-        if (type is "byte" or "int" or "dint" && Math.Truncate(number) != number)
+        if ((type is "byte" or "int" or "dint") && Math.Truncate(number) != number)
         {
             message = $"变量 {meta.VarId} 的数据类型 {meta.DataType} 需要整数";
             return false;
