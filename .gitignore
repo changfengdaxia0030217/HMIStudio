@@ -8,3 +8,7 @@ obj/
 sample/sample1.hmijob
 # Local runtime demo project and data
 src/HMI.Server/data/
+
+# Generated frontend bundle and local runtime files
+src/HMI.Server/wwwroot/
+data/
