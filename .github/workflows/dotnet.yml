@@ -59,7 +59,14 @@ jobs:
             }
             $variables = Invoke-RestMethod "http://127.0.0.1:5081/api/variables" -TimeoutSec 5
             if ($variables.Count -lt 1) { throw "HMIStudio runtime returned no variables" }
-            Write-Host "Runtime API ready; variable count: $($variables.Count)"
+            $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            $screen.title = "CI save validation"
+            $body = $screen | ConvertTo-Json -Depth 50
+            $saved = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $body -TimeoutSec 5
+            if (-not $saved.ok) { throw "HMIStudio screen save API returned failure" }
+            $screenAfter = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($screenAfter.title -ne "CI save validation") { throw "HMIStudio screen save was not persisted" }
+            Write-Host "Runtime API ready; variable count: $($variables.Count); screen save persisted"
           } finally {
             if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
           }
