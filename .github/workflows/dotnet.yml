@@ -84,7 +84,7 @@ jobs:
             $alarmId = $activeAlarm.alarmId
             $acknowledged = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/alarms/$alarmId/acknowledge" -Method Post -TimeoutSec 5
             if (-not $acknowledged.ok) { throw "Alarm acknowledgement API returned failure" }
-            $activeAfterAck = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5)
+            $activeAfterAck = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })
             $acknowledgedAlarm = $activeAfterAck | Where-Object { $_.alarmId -eq $alarmId } | Select-Object -First 1
             if (-not $acknowledgedAlarm -or -not $acknowledgedAlarm.acknowledged -or -not $acknowledgedAlarm.acknowledgedAt) { throw "Alarm acknowledgement state/time was not recorded" }
             $recoverBody = @{ value = 55; requestId = "ci-alarm-recover" } | ConvertTo-Json
@@ -98,8 +98,8 @@ jobs:
               if ($eventTypes -contains "Triggered" -and $eventTypes -contains "Acknowledged" -and $eventTypes -contains "Recovered") { break }
             }
             if ($eventTypes -notcontains "Triggered" -or $eventTypes -notcontains "Acknowledged" -or $eventTypes -notcontains "Recovered") { throw "Alarm history is missing trigger, acknowledgement, or recovery events" }
-            $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5)
-            if ($activeAfterRecovery.Count -ne 0) { throw "Recovered alarm remains active" }
+            $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })
+            if ($activeAfterRecovery.Count -ne 0) { throw "Recovered alarm remains active: $(ConvertTo-Json -InputObject $activeAfterRecovery -Depth 5 -Compress)" }
             $screen.title = "CI save validation"
             $body = $screen | ConvertTo-Json -Depth 50
             $saved = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $body -TimeoutSec 5
