@@ -14,6 +14,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
     private MockPlcDriverManager? _drivers;
     private MemoryVariablePool? _pool;
     private VariableSubscriptionManager? _subscriptions;
+    private AlarmManager? _alarms;
     private HmiProject? _project;
     private DateTimeOffset _startedAt;
 
@@ -27,6 +28,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
     public HmiProject Project => _project ?? throw new InvalidOperationException("工程尚未加载");
     public MemoryVariablePool Pool => _pool ?? throw new InvalidOperationException("变量池尚未初始化");
     public VariableSubscriptionManager Subscriptions => _subscriptions ?? throw new InvalidOperationException("订阅服务尚未初始化");
+    public IAlarmManager Alarms => _alarms ?? throw new InvalidOperationException("报警服务尚未初始化");
     public TimeSpan Uptime => DateTimeOffset.UtcNow - _startedAt;
 
     public MockPlcDriver? GetMockDriver(string protocol) => _drivers?.Resolve(protocol) as MockPlcDriver;
@@ -64,6 +66,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             _pool = new MemoryVariablePool(_drivers);
             _pool.Register(_project.Variables);
             _subscriptions = new VariableSubscriptionManager(_pool, ex => _logger.LogWarning(ex, "变量订阅消费者异常"));
+            _alarms = await AlarmManager.CreateAsync(_pool, _project.AlarmRules, Path.Combine(dataDirectory, "alarms.sqlite"), cancellationToken);
             _startedAt = DateTimeOffset.UtcNow;
 
             _logger.LogInformation("HMIStudio 工程已加载: {ProjectPath}; variables={VariableCount}; screens={ScreenCount}",
@@ -108,9 +111,11 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_alarms is not null) await _alarms.DisposeAsync();
         if (_subscriptions is not null) await _subscriptions.DisposeAsync();
         if (_pool is not null) await _pool.DisposeAsync();
         if (_drivers is not null) await _drivers.DisposeAsync();
+        _alarms = null;
         _subscriptions = null;
         _pool = null;
         _drivers = null;
@@ -177,6 +182,10 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             StartScreenId = "main",
             BaseWidth = 1280,
             BaseHeight = 720,
+            AlarmRules = new List<AlarmRule>
+            {
+                new() { Id = "target-speed-high", Name = "目标速度过高", VarId = "line.targetSpeed", Operator = ">", Value = 90.0, Enabled = true, Message = "目标速度超过 90 Hz" }
+            },
             Variables = new List<VariableMeta>
             {
                 new() { VarId = "line.running", Name = "设备运行", Kind = VariableKind.Memory, DataType = "bool", InitialValue = true, CycleMs = 100, IsPermanent = true },
