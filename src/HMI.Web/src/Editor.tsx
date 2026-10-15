@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
 import "./editor.css";
 import "./runtime-screen.css";
@@ -42,7 +42,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1);\n  const [, setHistoryVersion] = useState(0);\n  const historyRef = useRef<{ past: Screen[]; future: Screen[] }>({ past: [], future: [] });\n  const stageRef = useRef<HTMLDivElement>(null);\n  const liveScreenRef = useRef(screen);\n  liveScreenRef.current = screen;\n  const clipboardRef = useRef<Control | null>(null);
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
   const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
   const load = useCallback(async () => {
@@ -51,7 +51,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const [s, v] = await Promise.all([fetch(`${API}/api/screens/main`), fetch(`${API}/api/variables`)]);
       if (!s.ok || !v.ok) throw new Error("本机运行时不可用，请先启动 HMIStudio.Server。");
       const [loadedScreen, loadedVariables] = await Promise.all([s.json(), v.json()]);
-      setScreen({ ...loadedScreen, controls: loadedScreen.controls ?? [] });
+      const loaded = { ...loadedScreen, controls: loadedScreen.controls ?? [] } as Screen;\n      liveScreenRef.current = loaded; setScreen(loaded); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
       setVariables(loadedVariables);
       setSelectedId(null); setDirty(false); setMessage("");
     } catch (e) { setMessage(e instanceof Error ? e.message : "工程加载失败"); }
@@ -86,11 +86,47 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const verifyResponse = await fetch(`${API}/api/screens/${encodeURIComponent(screen.id)}`);
       if (!verifyResponse.ok) throw new Error("保存请求已返回，但重新读取画面失败");
       const persisted = await verifyResponse.json() as Screen;
-      setScreen({ ...persisted, controls: persisted.controls ?? [] });
+      const verified = { ...persisted, controls: persisted.controls ?? [] }; liveScreenRef.current = verified; setScreen(verified); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
       setDirty(false); setMessage("工程已保存，并已重新读取验证。");
     } catch (e) { setMessage(e instanceof Error ? e.message : "保存失败"); }
     finally { setSaving(false); }
   };
+  const undo = () => {
+    const previous = historyRef.current.past.pop();
+    if (!previous) return;
+    historyRef.current.future.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
+    liveScreenRef.current = previous; setScreen(previous); setDirty(true); setHistoryVersion(v => v + 1);
+    setSelectedId(id => previous.controls.some(item => item.id === id) ? id : null);
+  };
+  const redo = () => {
+    const next = historyRef.current.future.pop();
+    if (!next) return;
+    historyRef.current.past.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
+    liveScreenRef.current = next; setScreen(next); setDirty(true); setHistoryVersion(v => v + 1);
+    setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);
+  };
+  const copySelected = () => { if (selected) clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; };
+  const pasteControl = () => {
+    const source = clipboardRef.current; if (!source) return;
+    const clone = JSON.parse(JSON.stringify(source)) as Control;
+    clone.id = `${clone.controlType.toLowerCase()}-${Date.now().toString(36)}-${screen.controls.length}`;
+    clone.name = `${source.name} 副本`; clone.x = Math.min(1280 - clone.width, source.x + 24); clone.y = Math.min(720 - clone.height, source.y + 24);
+    commitScreen({ ...screen, controls: [...screen.controls, clone] }); setSelectedId(clone.id);
+  };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+      else if (mod && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
+      else if (mod && event.key.toLowerCase() === "c" && selected) { event.preventDefault(); copySelected(); }
+      else if (mod && event.key.toLowerCase() === "v" && clipboardRef.current) { event.preventDefault(); pasteControl(); }
+      else if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); removeSelected(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
   const binding = selected?.properties?.text?.source;
   const bindingMode = binding?.type === "$var" ? "variable" : "static";
   const textValue = String(resolveControlProperty(selected ?? newControl("Text", 0), "text", variablesById, selected?.name ?? ""));
@@ -99,7 +135,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     <header className="editor-topbar">
       <button className="editor-back" onClick={onBack}><ArrowLeft size={16} />返回运行监控</button>
       <div className="editor-project"><strong>HMIStudio</strong><span>/ 画面组态编辑器</span><i className={dirty ? "dirty-dot" : ""} />{dirty ? "未保存" : "已同步"}</div>
-      <div className="editor-actions"><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
+      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!clipboardRef.current} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
     </header>
     <div className="editor-workspace">
       <aside className="editor-library">
@@ -112,24 +148,32 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screen.title || "未命名画面"}<small>/{screen.id}</small></div><div><Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
-            <div className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) setSelectedId(null); }}>
+            <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) setSelectedId(null); }}>
               <div className="editor-grid" />
               {screen.controls.map(control => <ControlRenderer key={control.id} control={control} variables={variablesById} selected={selectedId === control.id} interactive onPointerDown={event => {
                 event.stopPropagation();
                 setSelectedId(control.id);
-                const stage = event.currentTarget.parentElement;
-                if (!stage) return;
-                const rect = stage.getBoundingClientRect();
-                const startX = event.clientX, startY = event.clientY, originX = control.x, originY = control.y;
+                const startX = event.clientX, startY = event.clientY;
+                const before = JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen;
+                const original = before.controls.find(item => item.id === control.id) ?? control;
+                const resizing = (event.target as HTMLElement).classList.contains("hmi-control-handle");
+                const stage = stageRef.current; if (!stage) return;
+                const rect = stage.getBoundingClientRect(); let moved = false; let finalControl = original;
                 const move = (pointer: PointerEvent) => {
-                  const dx = (pointer.clientX - startX) / rect.width * 1280;
-                  const dy = (pointer.clientY - startY) / rect.height * 720;
-                  setScreen(previous => ({ ...previous, controls: previous.controls.map(c => c.id === control.id ? { ...c, x: Math.max(0, Math.min(1280 - c.width, Math.round((originX + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - c.height, Math.round((originY + dy) / 8) * 8)) } : c) }));
-                  setDirty(true);
+                  const dx = (pointer.clientX - startX) / rect.width * 1280, dy = (pointer.clientY - startY) / rect.height * 720;
+                  if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+                  finalControl = resizing
+                    ? { ...original, width: Math.max(24, Math.min(1280 - original.x, Math.round((original.width + dx) / 8) * 8)), height: Math.max(24, Math.min(720 - original.y, Math.round((original.height + dy) / 8) * 8)) }
+                    : { ...original, x: Math.max(0, Math.min(1280 - original.width, Math.round((original.x + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - original.height, Math.round((original.y + dy) / 8) * 8)) };
+                  const next = { ...liveScreenRef.current, controls: liveScreenRef.current.controls.map(item => item.id === control.id ? finalControl : item) };
+                  liveScreenRef.current = next; setScreen(next);
                 };
-                const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-                window.addEventListener("pointermove", move);
-                window.addEventListener("pointerup", up, { once: true });
+                const up = () => {
+                  window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+                  if (moved) { historyRef.current.past.push(before); if (historyRef.current.past.length > 100) historyRef.current.past.shift(); historyRef.current.future = []; setDirty(true); setHistoryVersion(v => v + 1); }
+                  else { liveScreenRef.current = before; setScreen(before); }
+                };
+                window.addEventListener("pointermove", move); window.addEventListener("pointerup", up, { once: true }); window.addEventListener("pointercancel", up, { once: true });
               }} />)}
               {!screen.controls.length && <div className="editor-empty">从左侧控件库添加控件<br /><small>拖动控件调整位置，右侧修改属性</small></div>}
             </div>
