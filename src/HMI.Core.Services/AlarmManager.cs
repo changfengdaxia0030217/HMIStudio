@@ -95,8 +95,14 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
             if (string.IsNullOrWhiteSpace(rule.Operator) || !allowedOperators.Contains(rule.Operator.Trim()))
                 errors.Add($"报警规则 {rule.Id} 的比较运算符无效: {rule.Operator}");
 
+            if (rule.Value is JsonElement { ValueKind: JsonValueKind.Array or JsonValueKind.Object })
+            {
+                errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或数字");
+                continue;
+            }
+
             var value = NormalizeRuleValue(rule.Value);
-            if (value is null || value is JsonElement { ValueKind: JsonValueKind.Array or JsonValueKind.Object })
+            if (value is null || (value is not string && value is not bool && !TryNumber(value, out _)))
                 errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或数字");
             else if (TryNumber(value, out var number) && !double.IsFinite(number))
                 errors.Add($"报警规则 {rule.Id} 的数字比较值必须是有限数值");
