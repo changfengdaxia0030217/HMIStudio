@@ -38,6 +38,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [screen, setScreen] = useState<Screen>(fallbackScreen);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -61,7 +62,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const loaded = { ...loadedScreen, controls: loadedScreen.controls ?? [] } as Screen;
       liveScreenRef.current = loaded; setScreen(loaded); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
       setVariables(loadedVariables);
-      setSelectedId(null); setDirty(false); setMessage("");
+      setSelectedId(null); setSelectedIds([]); setDirty(false); setMessage("");
     } catch (e) { setMessage(e instanceof Error ? e.message : "工程加载失败"); }
     finally { setLoading(false); }
   }, []);
@@ -109,16 +110,16 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     if (!previous) return;
     historyRef.current.future.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
     liveScreenRef.current = previous; setScreen(previous); setDirty(true); setHistoryVersion(v => v + 1);
-    setSelectedId(id => previous.controls.some(item => item.id === id) ? id : null);
+    setSelectedId(id => previous.controls.some(item => item.id === id) ? id : null);\n    setSelectedIds(ids => ids.filter(id => previous.controls.some(item => item.id === id)));
   };
   const redo = () => {
     const next = historyRef.current.future.pop();
     if (!next) return;
     historyRef.current.past.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
     liveScreenRef.current = next; setScreen(next); setDirty(true); setHistoryVersion(v => v + 1);
-    setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);
+    setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);\n    setSelectedIds(ids => ids.filter(id => next.controls.some(item => item.id === id)));
   };
-  const copySelected = () => { if (selected) { clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; setHasClipboard(true); } };
+  const copySelected = () => { if (selected) { clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; setHasClipboard(true); } };\n  const alignSelected = (axis: "left" | "top" | "center-x" | "center-y") => {\n    const chosen = screen.controls.filter(control => selectedIds.includes(control.id));\n    if (chosen.length < 2) return;\n    const anchor = chosen[0];\n    const updated = new Map<string, Control>();\n    for (const control of chosen) {\n      let patch: Partial<Control>;\n      if (axis === "left") patch = { x: anchor.x };\n      else if (axis === "top") patch = { y: anchor.y };\n      else if (axis === "center-x") patch = { x: Math.max(0, Math.min(1280 - control.width, Math.round((anchor.x + anchor.width / 2 - control.width / 2) / 8) * 8)) };\n      else patch = { y: Math.max(0, Math.min(720 - control.height, Math.round((anchor.y + anchor.height / 2 - control.height / 2) / 8) * 8)) };\n      updated.set(control.id, { ...control, ...patch });\n    }\n    commitScreen({ ...screen, controls: screen.controls.map(control => updated.get(control.id) ?? control) });\n  };
   const pasteControl = () => {
     const source = clipboardRef.current; if (!source) return;
     const clone = JSON.parse(JSON.stringify(source)) as Control;
@@ -135,7 +136,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       else if (mod && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
       else if (mod && event.key.toLowerCase() === "c" && selected) { event.preventDefault(); copySelected(); }
       else if (mod && event.key.toLowerCase() === "v" && clipboardRef.current) { event.preventDefault(); pasteControl(); }
-      else if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); removeSelected(); }
+      else if ((event.key === "Delete" || event.key === "Backspace") && (selectedIds.length || selected)) { event.preventDefault(); removeSelected(); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -148,7 +149,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     <header className="editor-topbar">
       <button className="editor-back" onClick={onBack}><ArrowLeft size={16} />返回运行监控</button>
       <div className="editor-project"><strong>HMIStudio</strong><span>/ 画面组态编辑器</span><i className={dirty ? "dirty-dot" : ""} />{dirty ? "未保存" : "已同步"}</div>
-      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
+      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("left")} title="多选控件左对齐">左对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("top")} title="多选控件顶对齐">顶对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-x")} title="多选控件水平中心对齐">水平居中</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-y")} title="多选控件垂直中心对齐">垂直居中</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
     </header>
     <div className="editor-workspace">
       <aside className="editor-library">
@@ -161,7 +162,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screen.title || "未命名画面"}<small>/{screen.id}</small></div><div><Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
-            <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) setSelectedId(null); }}>
+            <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>
               <div className="editor-grid" />
               {screen.controls.map(control => <ControlRenderer key={control.id} control={control} variables={variablesById} selected={selectedId === control.id} interactive onPointerDown={event => {
                 event.stopPropagation();
@@ -200,7 +201,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         </div>
-        <footer className="editor-statusbar"><span><Circle size={8} />{screen.controls.length} 个控件</span><span>吸附网格：8 px</span><span>{dirty ? "有未保存修改" : "所有修改已保存"}</span></footer>
+        <footer className="editor-statusbar"><span><Circle size={8} />{screen.controls.length} 个控件</span><span>{selectedIds.length > 1 ? `已多选 ${selectedIds.length} 个` : "Shift + 点击可多选"}</span><span>吸附网格：8 px</span><span>{dirty ? "有未保存修改" : "所有修改已保存"}</span></footer>
       </main>
       <aside className="editor-inspector">
         <div className="editor-pane-title">属性检查器</div>
