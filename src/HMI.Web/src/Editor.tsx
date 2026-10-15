@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
 import "./editor.css";
+import { ControlRenderer, resolveControlProperty, type VariableMap } from "./ControlRenderer";
 
 const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://127.0.0.1:5080";
 type Source = { type: "$static"; value?: unknown } | { type: "$var"; varId: string; index?: number } | { type: string; [key: string]: unknown };
@@ -56,6 +57,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState("");
   const [zoom, setZoom] = useState(1);
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
+  const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -100,7 +102,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   };
   const binding = selected?.properties?.text?.source;
   const bindingMode = binding?.type === "$var" ? "variable" : "static";
-  const textValue = String(staticValue(selected ?? newControl("Text", 0), "text", selected?.name ?? ""));
+  const textValue = String(resolveControlProperty(selected ?? newControl("Text", 0), "text", variablesById, selected?.name ?? ""));
   const stageStyle = useMemo(() => ({ background: screen.background || "#111827" }), [screen.background]);
   return <div className="editor-shell">
     <header className="editor-topbar">
@@ -121,31 +123,23 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) setSelectedId(null); }}>
               <div className="editor-grid" />
-              {screen.controls.map(control => {
-                const label = String(staticValue(control, "text", control.name || control.controlType));
-                const color = String(staticValue(control, "color", "#E5EAF3"));
-                const background = String(staticValue(control, "background", "transparent"));
-                const fontSize = Number(staticValue(control, "fontSize", 18)) || 18;
-                return <div key={control.id} className={`editor-control ${selectedId === control.id ? "selected" : ""} control-${control.controlType.toLowerCase()}`} style={{ left: `${control.x / 12.8}%`, top: `${control.y / 7.2}%`, width: `${control.width / 12.8}%`, height: `${control.height / 7.2}%`, color, background, fontSize }} onPointerDown={event => {
-                  event.stopPropagation(); setSelectedId(control.id);
-                  const stage = event.currentTarget.parentElement;
-                  if (!stage) return;
-                  const rect = stage.getBoundingClientRect();
-                  const startX = event.clientX, startY = event.clientY, originX = control.x, originY = control.y;
-                  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-                  const move = (pointer: PointerEvent) => {
-                    const dx = (pointer.clientX - startX) / rect.width * 1280;
-                    const dy = (pointer.clientY - startY) / rect.height * 720;
-                    setScreen(previous => ({ ...previous, controls: previous.controls.map(c => c.id === control.id ? { ...c, x: Math.max(0, Math.min(1280 - c.width, Math.round((originX + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - c.height, Math.round((originY + dy) / 8) * 8)) } : c) }));
-                    setDirty(true);
-                  };
-                  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-                  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up, { once: true });
-                }}>
-                  {control.controlType === "Lamp" ? <span className="editor-lamp" style={{ background: color }} /> : control.controlType === "Rectangle" ? <span className="editor-rect-label">{control.name}</span> : label}
-                  {selectedId === control.id && <span className="editor-control-handle" />}
-                </div>;
-              })}
+              {screen.controls.map(control => <ControlRenderer key={control.id} control={control} variables={variablesById} selected={selectedId === control.id} interactive onPointerDown={event => {
+                event.stopPropagation();
+                setSelectedId(control.id);
+                const stage = event.currentTarget.parentElement;
+                if (!stage) return;
+                const rect = stage.getBoundingClientRect();
+                const startX = event.clientX, startY = event.clientY, originX = control.x, originY = control.y;
+                const move = (pointer: PointerEvent) => {
+                  const dx = (pointer.clientX - startX) / rect.width * 1280;
+                  const dy = (pointer.clientY - startY) / rect.height * 720;
+                  setScreen(previous => ({ ...previous, controls: previous.controls.map(c => c.id === control.id ? { ...c, x: Math.max(0, Math.min(1280 - c.width, Math.round((originX + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - c.height, Math.round((originY + dy) / 8) * 8)) } : c) }));
+                  setDirty(true);
+                };
+                const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+                window.addEventListener("pointermove", move);
+                window.addEventListener("pointerup", up, { once: true });
+              }} />)}
               {!screen.controls.length && <div className="editor-empty">从左侧控件库添加控件<br /><small>拖动控件调整位置，右侧修改属性</small></div>}
             </div>
           </div>
@@ -162,7 +156,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           </div>
           {selected.controlType !== "Rectangle" && selected.controlType !== "Lamp" && <label className="editor-field"><span>显示文本</span><input value={textValue} onChange={e => patchProperty("text", e.target.value)} /></label>}
           <label className="editor-field"><span>文本 / 指示色</span><div className="editor-color-row"><input type="color" value={/^#[0-9a-f]{6}$/i.test(colorValue(selected, "color", "#E5EAF3")) ? colorValue(selected, "color", "#E5EAF3") : "#E5EAF3"} onChange={e => patchProperty("color", e.target.value)} /><input value={colorValue(selected, "color", "#E5EAF3")} onChange={e => patchProperty("color", e.target.value)} /></div></label>
-          <label className="editor-field"><span>文字大小</span><input type="number" min={8} max={96} value={Number(staticValue(selected, "fontSize", 18))} onChange={e => patchProperty("fontSize", Math.max(8, Math.min(96, Number(e.target.value) || 18)))} /></label>
+          <label className="editor-field"><span>文字大小</span><input type="number" min={8} max={96} value={Number(resolveControlProperty(selected, "fontSize", variablesById, 18))} onChange={e => patchProperty("fontSize", Math.max(8, Math.min(96, Number(e.target.value) || 18)))} /></label>
           <label className="editor-field"><span>文本来源</span><select value={bindingMode} onChange={e => {
             if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
             else patchProperty("text", textValue);
