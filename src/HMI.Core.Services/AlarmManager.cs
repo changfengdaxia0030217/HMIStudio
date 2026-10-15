@@ -15,6 +15,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     private readonly MemoryVariablePool _pool;
     private readonly AlarmRule[] _rules;
     private readonly string _connectionString;
+    private readonly Action<Exception>? _onError;
     private readonly IDisposable _changeLease;
     private readonly Channel<VariableValuePackage> _changes = Channel.CreateUnbounded<VariableValuePackage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -23,12 +24,13 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     private Task _worker = Task.CompletedTask;
     private bool _disposed;
 
-    private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath)
+    private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath, Action<Exception>? onError)
     {
         _pool = pool;
         _rules = rules.Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.Id) && !string.IsNullOrWhiteSpace(rule.VarId))
             .ToArray();
         _connectionString = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(databasePath) }.ToString();
+        _onError = onError;
         _changeLease = _pool.RegisterInternalChangeConsumer(package => _changes.Writer.TryWrite(package));
     }
 
@@ -36,14 +38,15 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         MemoryVariablePool pool,
         IEnumerable<AlarmRule> rules,
         string databasePath,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<Exception>? onError = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath))!);
 
-        var manager = new AlarmManager(pool, rules, databasePath);
+        var manager = new AlarmManager(pool, rules, databasePath, onError);
         try
         {
             await manager.InitializeAsync(ct).ConfigureAwait(false);
@@ -204,10 +207,10 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                 foreach (var rule in _rules.Where(item => string.Equals(item.VarId, package.VarId, StringComparison.Ordinal)))
                     await EvaluateRuleAsync(rule, package).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
                 // A malformed rule or transient database error must not terminate the event consumer.
-                // The next variable update can retry evaluation; CI and logs surface persistent failures.
+                try { _onError?.Invoke(ex); } catch { /* Logging must not break alarm processing. */ }
             }
             finally { _stateGate.Release(); }
         }
