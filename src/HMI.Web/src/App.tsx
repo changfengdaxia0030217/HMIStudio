@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import Editor from "./Editor";
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Box, CheckCircle2,
   CircleHelp, Cpu, Gauge, RefreshCw, Send, Server, ShieldCheck,
   SlidersHorizontal, Wifi, WifiOff, Zap,
 } from "lucide-react";
@@ -128,7 +129,7 @@ export default function App() {
         <div className="side-divider" />
         <div className="nav-caption">运行中心</div>
         <div className="nav-item active"><Gauge size={17} />设备总览</div>
-        <div className="nav-item"><SlidersHorizontal size={17} />变量监视</div>
+        <div className="nav-item"><SlidersHorizontal size={17} />变量监视</div>\n        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
         <div className="nav-item"><AlertTriangle size={17} />报警中心 <span className="nav-count">{alarm ? "1" : "0"}</span></div>
         <div className="nav-item"><Cpu size={17} />驱动诊断</div>
         <div className="sidebar-bottom">
