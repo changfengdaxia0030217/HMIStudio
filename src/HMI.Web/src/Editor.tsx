@@ -42,7 +42,13 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [zoom, setZoom] = useState(1);\n  const [, setHistoryVersion] = useState(0);\n  const historyRef = useRef<{ past: Screen[]; future: Screen[] }>({ past: [], future: [] });\n  const stageRef = useRef<HTMLDivElement>(null);\n  const liveScreenRef = useRef(screen);\n  liveScreenRef.current = screen;\n  const clipboardRef = useRef<Control | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [, setHistoryVersion] = useState(0);
+  const historyRef = useRef<{ past: Screen[]; future: Screen[] }>({ past: [], future: [] });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const liveScreenRef = useRef(screen);
+  liveScreenRef.current = screen;
+  const clipboardRef = useRef<Control | null>(null);
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
   const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
   const load = useCallback(async () => {
@@ -51,16 +57,22 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const [s, v] = await Promise.all([fetch(`${API}/api/screens/main`), fetch(`${API}/api/variables`)]);
       if (!s.ok || !v.ok) throw new Error("本机运行时不可用，请先启动 HMIStudio.Server。");
       const [loadedScreen, loadedVariables] = await Promise.all([s.json(), v.json()]);
-      const loaded = { ...loadedScreen, controls: loadedScreen.controls ?? [] } as Screen;\n      liveScreenRef.current = loaded; setScreen(loaded); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
+      const loaded = { ...loadedScreen, controls: loadedScreen.controls ?? [] } as Screen;
+      liveScreenRef.current = loaded; setScreen(loaded); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
       setVariables(loadedVariables);
       setSelectedId(null); setDirty(false); setMessage("");
     } catch (e) { setMessage(e instanceof Error ? e.message : "工程加载失败"); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  const commitScreen = (next: Screen) => {
+    historyRef.current.past.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
+    if (historyRef.current.past.length > 100) historyRef.current.past.shift();
+    historyRef.current.future = [];
+    liveScreenRef.current = next; setScreen(next); setDirty(true); setHistoryVersion(v => v + 1);
+  };
   const patchControl = (id: string, patch: Partial<Control>) => {
-    setScreen(previous => ({ ...previous, controls: previous.controls.map(c => c.id === id ? { ...c, ...patch } : c) }));
-    setDirty(true);
+    commitScreen({ ...screen, controls: screen.controls.map(c => c.id === id ? { ...c, ...patch } : c) });
   };
   const patchProperty = (key: string, value: unknown) => {
     if (!selected) return;
@@ -69,13 +81,13 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   };
   const addControl = (type: string) => {
     const control = newControl(type, screen.controls.length);
-    setScreen(previous => ({ ...previous, controls: [...previous.controls, control] }));
-    setSelectedId(control.id); setDirty(true);
+    commitScreen({ ...screen, controls: [...screen.controls, control] });
+    setSelectedId(control.id);
   };
   const removeSelected = () => {
     if (!selected) return;
-    setScreen(previous => ({ ...previous, controls: previous.controls.filter(c => c.id !== selected.id) }));
-    setSelectedId(null); setDirty(true);
+    commitScreen({ ...screen, controls: screen.controls.filter(c => c.id !== selected.id) });
+    setSelectedId(null);
   };
   const save = async () => {
     setSaving(true); setMessage("");
