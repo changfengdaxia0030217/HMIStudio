@@ -236,7 +236,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                         new() { Id = "target-speed-input", Name = "目标速度输入", ControlType = "NumericInput", X = 260, Y = 330, Width = 180, Height = 48,
                             Properties = new Dictionary<string, PropertyBindingInfo>
                             {
-                                ["text"] = new() { Source = new VariablePropertySource { VarId = "line.targetSpeed" }, Direction = BindingDirection.TwoWay },
+                                ["text"] = new() { Source = new VariablePropertySource { VarId = "line.targetSpeed" }, Direction = PropertyBindingDirection.TwoWay },
                                 ["color"] = new() { Source = new StaticPropertySource { Value = "#38D9A9" } },
                                 ["fontSize"] = new() { Source = new StaticPropertySource { Value = 24 } }
                             }
