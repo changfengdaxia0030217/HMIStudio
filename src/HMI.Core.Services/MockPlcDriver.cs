@@ -70,10 +70,19 @@ public sealed class MockPlcDriver : IPlcDriver
     public void SetValue(string address, object? value)
     {
         if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("地址不能为空", nameof(address));
-        _values[address] = value;
+        _values[address] = value ?? NullSentinel;
     }
 
-    public bool TryGetValue(string address, out object? value) => _values.TryGetValue(address, out value);
+    public bool TryGetValue(string address, out object? value)
+    {
+        if (_values.TryGetValue(address, out var stored))
+        {
+            value = ReferenceEquals(stored, NullSentinel) ? null : stored;
+            return true;
+        }
+        value = null;
+        return false;
+    }
 }
 
 /// <summary>Creates simulator instances without requiring a real PLC protocol package.</summary>
