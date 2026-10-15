@@ -34,7 +34,8 @@ app.MapGet("/api/screens", (RuntimeProjectService runtime) => Results.Ok(runtime
 app.MapGet("/api/screens/{screenId}", (string screenId, RuntimeProjectService runtime) =>
 {
     var screen = runtime.Project.Screens.FirstOrDefault(s => string.Equals(s.Id, screenId, StringComparison.Ordinal));
-    return screen is null ? Results.NotFound(new { error = "画面不存在", screenId }) : Results.Ok(screen);
+    if (screen is null) return (IResult)Results.NotFound(new { error = "画面不存在", screenId });
+    return (IResult)Results.Ok(screen);
 });
 app.MapGet("/api/variables", (RuntimeProjectService runtime) => Results.Ok(runtime.GetVariableSnapshot()));
 app.MapGet("/api/variables/{varId}", (string varId, RuntimeProjectService runtime) =>
@@ -47,7 +48,8 @@ app.MapGet("/api/variables/{varId}", (string varId, RuntimeProjectService runtim
 app.MapPost("/api/variables/{varId}/write", async (string varId, WriteVariableRequest request, RuntimeProjectService runtime, CancellationToken ct) =>
 {
     var result = await runtime.Pool.WriteAsync(varId, NormalizeJsonValue(request.Value), ct, WriteSource.Runtime, request.RequestId);
-    return result.Ok ? Results.Ok(result) : Results.BadRequest(result);
+    if (result.Ok) return (IResult)Results.Ok(result);
+    return (IResult)Results.BadRequest(result);
 });
 app.MapGet("/api/runtime/stream", async (HttpContext context, RuntimeProjectService runtime, CancellationToken ct) =>
 {
@@ -63,9 +65,9 @@ app.MapGet("/api/runtime/stream", async (HttpContext context, RuntimeProjectServ
         return;
     }
 
-    context.Response.Headers.ContentType = "text/event-stream";
-    context.Response.Headers.CacheControl = "no-cache";
-    context.Response.Headers.Connection = "keep-alive";
+    context.Response.ContentType = "text/event-stream";
+    context.Response.Headers["Cache-Control"] = "no-cache";
+    context.Response.Headers["Connection"] = "keep-alive";
     var channel = Channel.CreateBounded<VariableValuePackage>(new BoundedChannelOptions(128)
     {
         FullMode = BoundedChannelFullMode.DropOldest,
@@ -104,9 +106,9 @@ app.MapGet("/api/runtime/stream", async (HttpContext context, RuntimeProjectServ
 app.MapPost("/api/runtime/mock-values", (MockValueRequest request, RuntimeProjectService runtime) =>
 {
     var driver = runtime.GetMockDriver(request.Protocol);
-    if (driver is null) return Results.BadRequest(new { error = "模拟驱动不可用" });
+    if (driver is null) return (IResult)Results.BadRequest(new { error = "模拟驱动不可用" });
     driver.SetValue(request.Address, NormalizeJsonValue(request.Value));
-    return Results.Ok(new { ok = true, request.Protocol, request.Address, request.Value });
+    return (IResult)Results.Ok(new { ok = true, request.Protocol, request.Address, request.Value });
 });
 
 app.Run();
