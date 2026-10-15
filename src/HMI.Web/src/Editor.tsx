@@ -167,7 +167,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
             if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
             else patchProperty("text", textValue);
           }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
-          {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={binding?.type === "$var" ? binding.varId : ""} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
+          {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
           <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定已写入工程模型。运行时动态求值与类型校验将在后续阶段接入。</span></div>
           <button className="editor-delete" onClick={removeSelected}>删除此控件</button>
         </>}
