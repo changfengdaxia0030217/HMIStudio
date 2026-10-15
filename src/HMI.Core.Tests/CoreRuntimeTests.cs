@@ -41,6 +41,25 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
+    public async Task WriteRejectsTypeMismatchAndConfiguredRangeViolation()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "speed", Name = "Speed", DataType = "float", Min = 0, Max = 100, InitialValue = 10.0 }
+        });
+
+        var outOfRange = await pool.WriteAsync("speed", 101.0);
+        var invalidType = await pool.WriteAsync("speed", "fast");
+
+        Assert.False(outOfRange.Ok);
+        Assert.Equal(WriteFailureReason.ValueOutOfRange, outOfRange.Reason);
+        Assert.False(invalidType.Ok);
+        Assert.Equal(WriteFailureReason.InvalidValue, invalidType.Reason);
+        Assert.Equal(10.0, await pool.ReadAsync("speed"));
+    }
+
+    [Fact]
     public async Task MockDriverReadsAndWritesOnlyAfterConnect()
     {
         var driver = new MockPlcDriver("SIM", new Dictionary<string, object?> { ["DB1.DBW0"] = 12 });
