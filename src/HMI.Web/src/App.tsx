@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Editor from "./Editor";
+import RuntimeScreen from "./RuntimeScreen";
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Box, CheckCircle2,
   CircleHelp, Cpu, Gauge, RefreshCw, Send, Server, ShieldCheck,
@@ -37,7 +38,7 @@ function qualityLabel(q: Quality) {
 }
 
 export default function App() {
-  const [view, setView] = useState<"runtime" | "editor">("runtime");
+  const [view, setView] = useState<"runtime" | "editor" | "screen">("runtime");
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [online, setOnline] = useState(false);
@@ -93,6 +94,7 @@ export default function App() {
   const speed = Number(byId["line.speed"]?.value ?? 0);
 
   if (view === "editor") return <Editor onBack={() => setView("runtime")} />;
+  if (view === "screen") return <RuntimeScreen onBack={() => setView("runtime")} variables={variables} />;
 
   const write = async (varId: string, value: unknown, message: string) => {
     setBusy(true); setNotice("");
@@ -133,7 +135,8 @@ export default function App() {
         <div className="nav-caption">运行中心</div>
         <div className="nav-item active"><Gauge size={17} />设备总览</div>
         <div className="nav-item"><SlidersHorizontal size={17} />变量监视</div>
-        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>\n        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
+        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("screen")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("screen"); }}><Activity size={17} />运行画面</div>
+        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
         <div className="nav-item"><AlertTriangle size={17} />报警中心 <span className="nav-count">{alarm ? "1" : "0"}</span></div>
         <div className="nav-item"><Cpu size={17} />驱动诊断</div>
         <div className="sidebar-bottom">
