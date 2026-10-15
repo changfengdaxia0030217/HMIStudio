@@ -1,36 +1,51 @@
 # HMIStudio
 
-面向 Windows x64 单机部署的 HMI/组态软件首版。当前技术路线为 C# + ASP.NET Core（.NET 10）+ React/TypeScript，首版只包含模拟 PLC 驱动，不连接真实设备。
+面向 Windows x64 单机部署的 HMI/组态软件首版。技术栈为 C# + ASP.NET Core（.NET 10）+ React/TypeScript，当前只提供本地模拟 PLC，不连接真实设备。
 
-## 当前进度
+## 当前可用能力
 
-- 核心变量池、变量元数据、写入回执与质量位
-- JSON 工程格式版本校验
-- 变量订阅生命周期与按周期采集
-- 模拟 PLC 读写、批量刷新与模拟信号注入
-- 本地 ASP.NET Core 运行时 API 和 SSE 实时变量流
-- React/TypeScript 运行监控预览
-- Windows CI：前端类型检查/构建、.NET restore/build/test、运行时 API smoke test
+- 本机 ASP.NET Core 运行时、演示工程自动创建、JSON 工程持久化
+- 变量元数据、写入校验/回执、质量位与 SSE 实时订阅
+- 运行监控：设备状态、变量列表、目标速度写入、模拟信号注入与报警切换
+- 组态编辑器：控件库、拖拽移动、八方向缩放、属性编辑、静态值/变量绑定
+- 编辑器撤销/重做、复制/粘贴、多选、批量对齐、批量删除、保存后重新读取验证
+- 运行画面共享控件渲染器；按钮可配置写入变量和值，数值输入可绑定可写变量
+- Windows CI：前端 TypeScript 构建、.NET restore/build/test、运行时 API 与工程持久化 smoke test
 
-## 快速启动
+## 快速启动（Windows）
 
-需要安装 .NET 10 SDK 和 Node.js 20+。在仓库根目录运行：
+前置条件：安装 **.NET 10 SDK** 与 **Node.js 20+**，并允许 PowerShell 执行本地脚本。
+
+在仓库根目录运行：
 
 ```powershell
-cd src/HMI.Web
-npm install
-npm run build
-cd ../..
-dotnet run --project src/HMI.Server
+powershell -ExecutionPolicy Bypass -File .\Start-HMIStudio.ps1
 ```
 
-浏览器打开：
+启动脚本会检查环境、安装缺失的前端依赖、构建 React 前端、启动本机服务，并在服务就绪后打开浏览器：
 
 `http://127.0.0.1:5080`
 
-首次启动会自动创建本地演示工程。默认只绑定本机 loopback，不连接真实 PLC。
+首次启动会自动创建演示工程。服务默认只绑定本机 loopback，不连接真实 PLC。服务日志位于系统临时目录的 `hmistudio-server.log` 与 `hmistudio-server-error.log`。脚本启动时会打印停止服务的命令。
 
-前端单独开发：
+## 模拟运行流程
+
+1. 打开 **组态编辑**，从左侧控件库添加按钮、文本、指示灯或数值输入。
+2. 选择控件，在右侧属性检查器设置外观。文本/数值显示可切换静态值或绑定工程变量。
+3. 对按钮设置 **写入变量** 与 **写入值**；布尔变量可使用 `toggle` 在 TRUE/FALSE 间切换。
+4. 点击 **保存工程**，等待保存后重新读取验证成功。
+5. 返回运行监控，再打开 **运行画面**。按钮写入和数值输入会提交到本地模拟变量，变量值由实时订阅更新。
+6. 在运行监控页也可以直接启停模拟设备、修改目标速度、注入速度值及触发/清除报警。
+
+## 开发模式
+
+终端一启动后端：
+
+```powershell
+dotnet run --project src/HMI.Server
+```
+
+终端二启动前端：
 
 ```powershell
 cd src/HMI.Web
@@ -38,7 +53,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`，后端仍需在 5080 端口运行。
+打开 `http://127.0.0.1:5173`。开发前端默认访问 `http://127.0.0.1:5080` API。
 
 ## 主要目录
 
@@ -46,9 +61,9 @@ npm run dev
 - `src/HMI.Core.Model`：工程、画面、变量元数据与属性值源模型
 - `src/HMI.Core.Services`：变量池、订阅、工程存储、模拟 PLC
 - `src/HMI.Server`：本地 ASP.NET Core 服务
-- `src/HMI.Web`：React/TypeScript 前端
+- `src/HMI.Web`：React/TypeScript 运行监控、组态编辑器与运行画面
 - `src/HMI.Core.Tests`：核心自动化测试
 
 ## 当前边界
 
-当前前端是运行监控预览，不是完整组态编辑器。拖拽画布、控件属性面板、属性值源求值、报警历史/SQLite、用户权限和真实 PLC 驱动仍在后续里程碑。由于尚未实现认证与授权，不要把服务暴露到不可信网络。
+这是可操作的早期模拟版本，不是生产级 HMI。暂不支持真实 PLC 驱动、完整报警历史/SQLite 查询界面、用户认证/角色权限、画面导航与完整事件脚本。按钮目前实现变量写入动作；复杂的条件动作、表达式/公式求值和组件化模板仍需继续开发。不要将本地服务暴露到不可信网络。
