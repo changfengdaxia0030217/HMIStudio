@@ -42,7 +42,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1);\n  const [hasClipboard, setHasClipboard] = useState(false);
   const [, setHistoryVersion] = useState(0);
   const historyRef = useRef<{ past: Screen[]; future: Screen[] }>({ past: [], future: [] });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -117,7 +117,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     liveScreenRef.current = next; setScreen(next); setDirty(true); setHistoryVersion(v => v + 1);
     setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);
   };
-  const copySelected = () => { if (selected) clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; };
+  const copySelected = () => { if (selected) { clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; setHasClipboard(true); } };
   const pasteControl = () => {
     const source = clipboardRef.current; if (!source) return;
     const clone = JSON.parse(JSON.stringify(source)) as Control;
@@ -147,7 +147,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     <header className="editor-topbar">
       <button className="editor-back" onClick={onBack}><ArrowLeft size={16} />返回运行监控</button>
       <div className="editor-project"><strong>HMIStudio</strong><span>/ 画面组态编辑器</span><i className={dirty ? "dirty-dot" : ""} />{dirty ? "未保存" : "已同步"}</div>
-      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!clipboardRef.current} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
+      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
     </header>
     <div className="editor-workspace">
       <aside className="editor-library">
