@@ -10,6 +10,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<RuntimeProjectService> _logger;
     private readonly SemaphoreSlim _startGate = new(1, 1);
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
     private MockPlcDriverManager? _drivers;
     private MemoryVariablePool? _pool;
     private VariableSubscriptionManager? _subscriptions;
@@ -113,6 +114,58 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         _subscriptions = null;
         _pool = null;
         _drivers = null;
+    }
+
+    public async Task<IReadOnlyList<string>> SaveScreenAsync(string screenId, HmiScreen screen, CancellationToken cancellationToken = default)
+    {
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            var errors = new List<string>();
+            if (!string.Equals(screen.Id, screenId, StringComparison.Ordinal))
+                errors.Add("画面 ID 与请求地址不一致");
+            if (string.IsNullOrWhiteSpace(screen.Title))
+                errors.Add("画面名称不能为空");
+            if (screen.Width <= 0 || screen.Height <= 0)
+                errors.Add("画面宽高必须大于 0");
+
+            var existingIndex = Project.Screens.FindIndex(item => string.Equals(item.Id, screenId, StringComparison.Ordinal));
+            if (existingIndex < 0)
+                errors.Add("画面不存在");
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var control in screen.Controls)
+            {
+                if (string.IsNullOrWhiteSpace(control.Id))
+                    errors.Add("控件 ID 不能为空");
+                else if (!ids.Add(control.Id))
+                    errors.Add($"控件 ID 重复: {control.Id}");
+                if (!double.IsFinite(control.X) || !double.IsFinite(control.Y) ||
+                    !double.IsFinite(control.Width) || !double.IsFinite(control.Height))
+                    errors.Add($"控件 {control.Id} 的坐标或尺寸不是有效数字");
+                else if (control.X < 0 || control.Y < 0 || control.Width <= 0 || control.Height <= 0 ||
+                         control.X + control.Width > Project.BaseWidth || control.Y + control.Height > Project.BaseHeight)
+                    errors.Add($"控件 {control.Id} 超出画布边界或尺寸无效");
+            }
+
+            if (errors.Count > 0) return errors;
+            var previous = Project.Screens[existingIndex];
+            Project.Screens[existingIndex] = screen;
+            try
+            {
+                await new ProjectStorage().SaveAsync(ProjectPath, Project, cancellationToken);
+                _logger.LogInformation("画面已保存: {ScreenId}; controls={ControlCount}", screenId, screen.Controls.Count);
+                return Array.Empty<string>();
+            }
+            catch
+            {
+                Project.Screens[existingIndex] = previous;
+                throw;
+            }
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
     }
 
     private static HmiProject CreateDemoProject()
