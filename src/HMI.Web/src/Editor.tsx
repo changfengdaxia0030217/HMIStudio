@@ -237,10 +237,14 @@ export default function Editor({ onBack }: { onBack: () => void }) {
             {(["x", "y", "width", "height"] as const).map(key => <label className="editor-field" key={key}><span>{{ x: "X 坐标", y: "Y 坐标", width: "宽度", height: "高度" }[key]}</span><input type="number" min={key === "width" || key === "height" ? 8 : 0} value={selected[key]} onChange={e => patchControl(selected.id, { [key]: Math.max(key === "width" || key === "height" ? 8 : 0, Number(e.target.value) || 0) })} /></label>)}
           </div>
           {getControlDefinition(selected.controlType).properties.map(property => {
-            if (property.key === "text") {
-              return <label className="editor-field" key={property.key}><span>{property.label}</span><input value={textValue} onChange={e => patchProperty("text", e.target.value)} /></label>;
-            }
             const value = String(staticValue(selected, property.key, property.defaultValue));
+            if (property.key === "writeVarId") {
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><select value={value} onChange={e => patchProperty(property.key, e.target.value)}><option value="">不写入变量</option>{variables.map(variable => <option key={variable.varId} value={variable.varId}>{variable.name} · {variable.varId}</option>)}</select></label>;
+            }
+            if (property.kind === "text") {
+              const text = property.key === "text" ? textValue : value;
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><input value={text} onChange={e => patchProperty(property.key, e.target.value)} /></label>;
+            }
             if (property.kind === "color") {
               const color = /^#[0-9a-f]{6}$/i.test(value) ? value : String(property.defaultValue);
               return <label className="editor-field" key={property.key}><span>{property.label}</span><div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div></label>;
@@ -254,7 +258,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
             }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
             {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
           </>}
-          <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定已写入工程模型。运行时动态求值与类型校验将在后续阶段接入。</span></div>
+          <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定会在运行画面实时求值；按钮可配置变量写入，数值输入可绑定可写变量。</span></div>
           <button className="editor-delete" onClick={removeSelected}>删除此控件</button>
         </>}
       </aside>
