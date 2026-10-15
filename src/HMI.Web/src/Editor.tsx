@@ -84,12 +84,14 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const addControl = (type: string) => {
     const control = newControl(type, screen.controls.length);
     commitScreen({ ...screen, controls: [...screen.controls, control] });
-    setSelectedId(control.id);
+    setSelectedId(control.id); setSelectedIds([control.id]);
   };
   const removeSelected = () => {
-    if (!selected) return;
-    commitScreen({ ...screen, controls: screen.controls.filter(c => c.id !== selected.id) });
-    setSelectedId(null);
+    const ids = selectedIds.length ? selectedIds : selected ? [selected.id] : [];
+    if (!ids.length) return;
+    const removed = new Set(ids);
+    commitScreen({ ...screen, controls: screen.controls.filter(c => !removed.has(c.id)) });
+    setSelectedId(null); setSelectedIds([]);
   };
   const save = async () => {
     setSaving(true); setMessage("");
@@ -142,7 +144,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     const clone = JSON.parse(JSON.stringify(source)) as Control;
     clone.id = `${clone.controlType.toLowerCase()}-${Date.now().toString(36)}-${screen.controls.length}`;
     clone.name = `${source.name} 副本`; clone.x = Math.min(1280 - clone.width, source.x + 24); clone.y = Math.min(720 - clone.height, source.y + 24);
-    commitScreen({ ...screen, controls: [...screen.controls, clone] }); setSelectedId(clone.id);
+    commitScreen({ ...screen, controls: [...screen.controls, clone] }); setSelectedId(clone.id); setSelectedIds([clone.id]);
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -181,9 +183,15 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>
               <div className="editor-grid" />
-              {screen.controls.map(control => <ControlRenderer key={control.id} control={control} variables={variablesById} selected={selectedId === control.id} interactive onPointerDown={event => {
+              {screen.controls.map(control => <ControlRenderer key={control.id} control={control} variables={variablesById} selected={selectedIds.includes(control.id)} interactive onPointerDown={event => {
                 event.stopPropagation();
-                setSelectedId(control.id);
+                if (event.shiftKey) {
+                  const nextIds = selectedIds.includes(control.id) ? selectedIds.filter(id => id !== control.id) : [...selectedIds, control.id];
+                  setSelectedIds(nextIds);
+                  setSelectedId(nextIds.includes(control.id) ? control.id : nextIds[nextIds.length - 1] ?? null);
+                  return;
+                }
+                setSelectedId(control.id); setSelectedIds([control.id]);
                 const startX = event.clientX, startY = event.clientY;
                 const before = JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen;
                 const original = before.controls.find(item => item.id === control.id) ?? control;
