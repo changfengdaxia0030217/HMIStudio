@@ -127,14 +127,27 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
 
         var id = requestId ?? Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<WriteResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = new WriteRequest(varId, value, source, id, tcs);
+
+        // Cancellation can prevent a request from entering the queue. Once accepted, however,
+        // the write may have a physical side effect and cannot safely be reported as cancelled
+        // while it continues in the background. After enqueue, await the definitive receipt.
         try
         {
-            await _writeQueue.Writer.WriteAsync(new WriteRequest(varId, value, source, id, tcs), ct);
-            return await tcs.Task.WaitAsync(ct);
+            await _writeQueue.Writer.WriteAsync(request, ct);
         }
         catch (OperationCanceledException)
         {
-            return new WriteResult(false, WriteFailureReason.Cancelled, id, "写入已取消");
+            return new WriteResult(false, WriteFailureReason.Cancelled, id, "写入在进入队列前已取消");
+        }
+        catch (Exception ex)
+        {
+            return new WriteResult(false, WriteFailureReason.DriverError, id, ex.Message);
+        }
+
+        try
+        {
+            return await tcs.Task.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
