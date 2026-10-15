@@ -29,7 +29,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         _pool = pool;
         _rules = rules.Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.Id) && !string.IsNullOrWhiteSpace(rule.VarId))
             .ToArray();
-        _connectionString = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(databasePath) }.ToString();
+        _connectionString = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(databasePath), Pooling = false }.ToString();
         _onError = onError;
         _changeLease = _pool.RegisterInternalChangeConsumer(package => _changes.Writer.TryWrite(package));
     }
