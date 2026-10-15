@@ -38,6 +38,8 @@ export const CONTROL_REGISTRY: ControlDefinition[] = [
   { type: "Button", label: "按钮", width: 140, height: 44, properties: [
     { ...commonText, defaultValue: "按钮" }, { ...commonColor, defaultValue: "#FFFFFF" },
     { ...background, defaultValue: "#2563EB" },
+    { key: "writeVarId", label: "写入变量", kind: "text", defaultValue: "line.running" },
+    { key: "writeValue", label: "写入值（toggle 可切换布尔值）", kind: "text", defaultValue: "toggle" },
   ] },
   { type: "Lamp", label: "指示灯", width: 72, height: 72, properties: [
     { ...commonColor, defaultValue: "#38D9A9" },
