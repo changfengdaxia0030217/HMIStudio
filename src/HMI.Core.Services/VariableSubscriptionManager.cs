@@ -137,6 +137,7 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
                     .Select(kv => kv.Key)
                     .ToArray();
 
+                await _pool.RefreshFromDriversAsync(varIds, token).ConfigureAwait(false);
                 foreach (var id in varIds)
                 {
                     if (token.IsCancellationRequested) break;
