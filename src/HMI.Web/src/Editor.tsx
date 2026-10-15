@@ -168,15 +168,23 @@ export default function Editor({ onBack }: { onBack: () => void }) {
                 const startX = event.clientX, startY = event.clientY;
                 const before = JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen;
                 const original = before.controls.find(item => item.id === control.id) ?? control;
-                const resizing = (event.target as HTMLElement).classList.contains("hmi-control-handle");
+                const target = event.target as HTMLElement;
+                const handle = target.classList.contains("hmi-control-handle") ? target.className.match(/handle-(nw|n|ne|e|se|s|sw|w)/)?.[1] : undefined;
                 const stage = stageRef.current; if (!stage) return;
                 const rect = stage.getBoundingClientRect(); let moved = false; let finalControl = original;
                 const move = (pointer: PointerEvent) => {
                   const dx = (pointer.clientX - startX) / rect.width * 1280, dy = (pointer.clientY - startY) / rect.height * 720;
                   if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
-                  finalControl = resizing
-                    ? { ...original, width: Math.max(24, Math.min(1280 - original.x, Math.round((original.width + dx) / 8) * 8)), height: Math.max(24, Math.min(720 - original.y, Math.round((original.height + dy) / 8) * 8)) }
-                    : { ...original, x: Math.max(0, Math.min(1280 - original.width, Math.round((original.x + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - original.height, Math.round((original.y + dy) / 8) * 8)) };
+                  if (handle) {
+                    let x = original.x, y = original.y, right = original.x + original.width, bottom = original.y + original.height;
+                    if (handle.includes("w")) x = Math.max(0, Math.min(right - 24, Math.round((original.x + dx) / 8) * 8));
+                    if (handle.includes("e")) right = Math.min(1280, Math.max(x + 24, Math.round((original.x + original.width + dx) / 8) * 8));
+                    if (handle.includes("n")) y = Math.max(0, Math.min(bottom - 24, Math.round((original.y + dy) / 8) * 8));
+                    if (handle.includes("s")) bottom = Math.min(720, Math.max(y + 24, Math.round((original.y + original.height + dy) / 8) * 8));
+                    finalControl = { ...original, x, y, width: right - x, height: bottom - y };
+                  } else {
+                    finalControl = { ...original, x: Math.max(0, Math.min(1280 - original.width, Math.round((original.x + dx) / 8) * 8)), y: Math.max(0, Math.min(720 - original.height, Math.round((original.y + dy) / 8) * 8)) };
+                  }
                   const next = { ...liveScreenRef.current, controls: liveScreenRef.current.controls.map(item => item.id === control.id ? finalControl : item) };
                   liveScreenRef.current = next; setScreen(next);
                 };
