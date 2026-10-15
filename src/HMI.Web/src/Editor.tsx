@@ -42,7 +42,8 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [zoom, setZoom] = useState(1);\n  const [hasClipboard, setHasClipboard] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [hasClipboard, setHasClipboard] = useState(false);
   const [, setHistoryVersion] = useState(0);
   const historyRef = useRef<{ past: Screen[]; future: Screen[] }>({ past: [], future: [] });
   const stageRef = useRef<HTMLDivElement>(null);
