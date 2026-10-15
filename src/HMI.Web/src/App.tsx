@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2,
   CircleHelp, Cpu, Gauge, RefreshCw, Send, Server, ShieldCheck,
@@ -203,6 +204,6 @@ export default function App() {
   );
 }
 
-function Metric({ icon, label, value, unit, detail, tone }: { icon: React.ReactNode; label: string; value: string; unit?: string; detail: string; tone: string }) {
+function Metric({ icon, label, value, unit, detail, tone }: { icon: ReactNode; label: string; value: string; unit?: string; detail: string; tone: string }) {
   return <div className="metric-card"><div className={`metric-icon ${tone}`}>{icon}</div><div className="metric-label">{label}</div><div className="metric-value">{value}{unit && <small>{unit}</small>}</div><div className="metric-detail">{detail}</div></div>;
 }
