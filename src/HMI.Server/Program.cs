@@ -53,6 +53,25 @@ app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, 
         return (IResult)Results.Problem(title: "工程保存失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
+app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, CancellationToken ct) =>
+    Results.Ok(await runtime.Alarms.GetActiveAsync(ct)));
+
+app.MapGet("/api/alarms/history", async (int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
+    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct)));
+
+app.MapPost("/api/alarms/{alarmId}/acknowledge", async (string alarmId, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    try
+    {
+        await runtime.Alarms.AcknowledgeAsync(alarmId, ct);
+        return (IResult)Results.Ok(new { ok = true, alarmId, acknowledged = true });
+    }
+    catch (KeyNotFoundException)
+    {
+        return (IResult)Results.NotFound(new { error = "活动报警不存在", alarmId });
+    }
+});
+
 app.MapGet("/api/variables", (RuntimeProjectService runtime) => Results.Ok(runtime.GetVariableSnapshot()));
 app.MapGet("/api/variables/{varId}", (string varId, RuntimeProjectService runtime) =>
 {
