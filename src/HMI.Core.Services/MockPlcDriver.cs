@@ -9,7 +9,8 @@ namespace HMI.Core.Services;
 /// </summary>
 public sealed class MockPlcDriver : IPlcDriver
 {
-    private readonly ConcurrentDictionary<string, object?> _values = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object NullSentinel = new();
+    private readonly ConcurrentDictionary<string, object> _values = new(StringComparer.OrdinalIgnoreCase);
     private volatile LinkStatus _status = LinkStatus.Initialized;
 
     public MockPlcDriver(string protocol = "MOCK", IReadOnlyDictionary<string, object?>? initialValues = null)
@@ -18,7 +19,7 @@ public sealed class MockPlcDriver : IPlcDriver
         if (initialValues is not null)
         {
             foreach (var item in initialValues)
-                _values[item.Key] = item.Value;
+                _values[item.Key] = item.Value ?? NullSentinel;
         }
     }
 
@@ -51,7 +52,7 @@ public sealed class MockPlcDriver : IPlcDriver
         {
             ct.ThrowIfCancellationRequested();
             if (_values.TryGetValue(address, out var value))
-                result[address] = value;
+                result[address] = ReferenceEquals(value, NullSentinel) ? null : value;
         }
         return Task.FromResult<IReadOnlyDictionary<string, object?>>(result);
     }
@@ -61,7 +62,7 @@ public sealed class MockPlcDriver : IPlcDriver
         ct.ThrowIfCancellationRequested();
         if (_status != LinkStatus.Connected) return Task.FromResult(false);
         if (string.IsNullOrWhiteSpace(address)) return Task.FromResult(false);
-        _values[address] = value;
+        _values[address] = value ?? NullSentinel;
         return Task.FromResult(true);
     }
 
