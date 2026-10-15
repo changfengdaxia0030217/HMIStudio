@@ -76,7 +76,8 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     {
         System.Text.Json.JsonElement je => je.ValueKind switch
         {
-            System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => i,
+            System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+            System.Text.Json.JsonValueKind.Number when je.TryGetDouble(out var d) => d,
             System.Text.Json.JsonValueKind.String => je.GetString(),
             System.Text.Json.JsonValueKind.True => true,
             System.Text.Json.JsonValueKind.False => false,
@@ -120,12 +121,16 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     /// <inheritdoc/>
     public async Task<WriteResult> WriteAsync(string varId, object? value, CancellationToken ct = default, WriteSource source = WriteSource.Runtime, string? requestId = null)
     {
-        if (!_slots.ContainsKey(varId))
-            return new WriteResult(false, WriteFailureReason.NotExist, requestId ?? Guid.NewGuid().ToString("N"), $"变量不存在: {varId}");
-        if (_metas.TryGetValue(varId, out var meta) && meta.IsReadOnly)
-            return new WriteResult(false, WriteFailureReason.ReadOnly, requestId ?? Guid.NewGuid().ToString("N"), $"变量只读: {varId}");
-
         var id = requestId ?? Guid.NewGuid().ToString("N");
+        if (!_slots.ContainsKey(varId))
+            return new WriteResult(false, WriteFailureReason.NotExist, id, $"变量不存在: {varId}");
+        if (_metas.TryGetValue(varId, out var meta) && meta.IsReadOnly)
+            return new WriteResult(false, WriteFailureReason.ReadOnly, id, $"变量只读: {varId}");
+
+        value = NormalizeValue(value);
+        if (meta is not null && !TryValidateWriteValue(meta, value, out var failureReason, out var validationMessage))
+            return new WriteResult(false, failureReason, id, validationMessage);
+
         var tcs = new TaskCompletionSource<WriteResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var request = new WriteRequest(varId, value, source, id, tcs);
 
@@ -152,6 +157,80 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
         catch (Exception ex)
         {
             return new WriteResult(false, WriteFailureReason.DriverError, id, ex.Message);
+        }
+    }
+
+    private static bool TryValidateWriteValue(VariableMeta meta, object? value, out WriteFailureReason reason, out string message)
+    {
+        reason = WriteFailureReason.InvalidValue;
+        message = $"变量 {meta.VarId} 的值与数据类型 {meta.DataType} 不匹配";
+
+        var type = meta.DataType.Trim().ToLowerInvariant();
+        if (type == "bool")
+        {
+            if (value is bool) return true;
+            return false;
+        }
+        if (type == "string")
+        {
+            if (value is string) return true;
+            return false;
+        }
+
+        if (type is not ("byte" or "int" or "dint" or "float" or "double" or "real"))
+            return false;
+
+        if (!TryGetNumericValue(value, out var number) || !double.IsFinite(number))
+            return false;
+
+        double? typeMin = type switch
+        {
+            "byte" => byte.MinValue,
+            "int" => short.MinValue,
+            "dint" => int.MinValue,
+            _ => null
+        };
+        double? typeMax = type switch
+        {
+            "byte" => byte.MaxValue,
+            "int" => short.MaxValue,
+            "dint" => int.MaxValue,
+            _ => null
+        };
+
+        if (type is "byte" or "int" or "dint" && Math.Truncate(number) != number)
+        {
+            message = $"变量 {meta.VarId} 的数据类型 {meta.DataType} 需要整数";
+            return false;
+        }
+
+        if ((typeMin.HasValue && number < typeMin.Value) || (typeMax.HasValue && number > typeMax.Value) ||
+            (meta.Min.HasValue && number < meta.Min.Value) || (meta.Max.HasValue && number > meta.Max.Value))
+        {
+            reason = WriteFailureReason.ValueOutOfRange;
+            message = $"变量 {meta.VarId} 的值 {number} 超出允许范围";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetNumericValue(object? value, out double number)
+    {
+        switch (value)
+        {
+            case byte v: number = v; return true;
+            case sbyte v: number = v; return true;
+            case short v: number = v; return true;
+            case ushort v: number = v; return true;
+            case int v: number = v; return true;
+            case uint v: number = v; return true;
+            case long v: number = v; return true;
+            case ulong v: number = v; return true;
+            case float v: number = v; return true;
+            case double v: number = v; return true;
+            case decimal v: number = (double)v; return true;
+            default: number = 0; return false;
         }
     }
 
