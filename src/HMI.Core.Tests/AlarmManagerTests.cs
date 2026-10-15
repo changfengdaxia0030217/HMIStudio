@@ -89,6 +89,79 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task EnabledRuleWithUnknownVariableIsRejected()
+    {
+        var rule = CreateRules()[0];
+        rule.VarId = "missing-variable";
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task EnabledRuleWithUnsupportedOperatorIsRejected()
+    {
+        var rule = CreateRules()[0];
+        rule.Operator = "contains";
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task DuplicateEnabledRuleIdsAreRejected()
+    {
+        var first = CreateRules()[0];
+        var second = CreateRules()[0];
+        second.Name = "Duplicate";
+        await AssertRulesRejectedAsync(first, second);
+    }
+
+    [Fact]
+    public async Task NonFiniteNumericThresholdIsRejected()
+    {
+        var rule = CreateRules()[0];
+        rule.Value = double.NaN;
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task DisabledInvalidRuleIsIgnored()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            var disabled = new AlarmRule
+            {
+                Id = "",
+                Name = "",
+                VarId = "missing-variable",
+                Operator = "invalid",
+                Value = null,
+                Enabled = false
+            };
+            await using var alarms = await AlarmManager.CreateAsync(pool, [disabled], Path.Combine(directory, "alarms.sqlite"));
+            Assert.Empty(await alarms.GetActiveAsync());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task AssertRulesRejectedAsync(params AlarmRule[] rules)
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                AlarmManager.CreateAsync(pool, rules, Path.Combine(directory, "alarms.sqlite")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AcknowledgingUnknownAlarmFailsExplicitly()
     {
         var directory = CreateTempDirectory();
