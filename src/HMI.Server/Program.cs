@@ -40,6 +40,19 @@ app.MapGet("/api/screens/{screenId}", (string screenId, RuntimeProjectService ru
     if (screen is null) return (IResult)Results.NotFound(new { error = "画面不存在", screenId });
     return (IResult)Results.Ok(screen);
 });
+app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    try
+    {
+        var errors = await runtime.SaveScreenAsync(screenId, screen, ct);
+        if (errors.Count > 0) return (IResult)Results.BadRequest(new { error = string.Join("；", errors), errors });
+        return (IResult)Results.Ok(new { ok = true, screenId, saved = true });
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+    {
+        return (IResult)Results.Problem(title: "工程保存失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.MapGet("/api/variables", (RuntimeProjectService runtime) => Results.Ok(runtime.GetVariableSnapshot()));
 app.MapGet("/api/variables/{varId}", (string varId, RuntimeProjectService runtime) =>
 {
