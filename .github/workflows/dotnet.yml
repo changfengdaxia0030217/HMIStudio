@@ -36,3 +36,30 @@ jobs:
         run: dotnet build HMIStudio.sln --configuration Release --no-restore
       - name: Test
         run: dotnet test HMIStudio.sln --configuration Release --no-build --no-restore
+      - name: Runtime API smoke test
+        shell: pwsh
+        run: |
+          $env:HMISTUDIO_URLS = "http://127.0.0.1:5081"
+          $server = Start-Process dotnet -ArgumentList @("run", "--no-build", "--project", "src/HMI.Server", "--configuration", "Release") -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\hmistudio-server.log" -RedirectStandardError "$env:RUNNER_TEMP\hmistudio-server-error.log"
+          try {
+            $health = $null
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 2
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:5081/api/health" -TimeoutSec 3
+                break
+              } catch {
+                if ($server.HasExited) { break }
+              }
+            }
+            if ($null -eq $health -or $health.status -ne "ok") {
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server.log" -ErrorAction SilentlyContinue
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server-error.log" -ErrorAction SilentlyContinue
+              throw "HMIStudio runtime health endpoint did not become ready"
+            }
+            $variables = Invoke-RestMethod "http://127.0.0.1:5081/api/variables" -TimeoutSec 5
+            if ($variables.Count -lt 1) { throw "HMIStudio runtime returned no variables" }
+            Write-Host "Runtime API ready; variable count: $($variables.Count)"
+          } finally {
+            if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
+          }
