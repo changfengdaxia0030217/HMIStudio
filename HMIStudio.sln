@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HMI.Core.Services", "src\HM
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HMI.Core.Tests", "src\HMI.Core.Tests\HMI.Core.Tests.csproj", "{D6A1B991-1D2A-4E6B-A7D3-6F4D2F98E14B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HMI.Server", "src\HMI.Server\HMI.Server.csproj", "{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -70,6 +72,18 @@ Global
 		{D6A1B991-1D2A-4E6B-A7D3-6F4D2F98E14B}.Release|x64.Build.0 = Release|Any CPU
 		{D6A1B991-1D2A-4E6B-A7D3-6F4D2F98E14B}.Release|x86.ActiveCfg = Release|Any CPU
 		{D6A1B991-1D2A-4E6B-A7D3-6F4D2F98E14B}.Release|x86.Build.0 = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|x64.Build.0 = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Debug|x86.Build.0 = Debug|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|x64.ActiveCfg = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|x64.Build.0 = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|x86.ActiveCfg = Release|Any CPU
+		{B9E4FEE8-1D65-4D44-A7C7-A9D0F1A7C3E2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
