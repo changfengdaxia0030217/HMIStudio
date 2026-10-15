@@ -66,7 +66,28 @@ jobs:
             if (-not $saved.ok) { throw "HMIStudio screen save API returned failure" }
             $screenAfter = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             if ($screenAfter.title -ne "CI save validation") { throw "HMIStudio screen save was not persisted" }
-            Write-Host "Runtime API ready; variable count: $($variables.Count); screen save persisted"
+            & taskkill /PID $server.Id /T /F | Out-Null
+            $server.WaitForExit(10000) | Out-Null
+            Start-Sleep -Seconds 2
+            $server = Start-Process dotnet -ArgumentList @("run", "--no-build", "--project", "src/HMI.Server", "--configuration", "Release") -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\hmistudio-server-restart.log" -RedirectStandardError "$env:RUNNER_TEMP\hmistudio-server-restart-error.log"
+            $healthAfterRestart = $null
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 2
+              try {
+                $healthAfterRestart = Invoke-RestMethod "http://127.0.0.1:5081/api/health" -TimeoutSec 3
+                break
+              } catch {
+                if ($server.HasExited) { break }
+              }
+            }
+            if ($null -eq $healthAfterRestart -or $healthAfterRestart.status -ne "ok") {
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server-restart.log" -ErrorAction SilentlyContinue
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server-restart-error.log" -ErrorAction SilentlyContinue
+              throw "HMIStudio runtime did not restart after persistence test"
+            }
+            $screenAfterRestart = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($screenAfterRestart.title -ne "CI save validation") { throw "HMIStudio screen changes did not survive runtime restart" }
+            Write-Host "Runtime API ready; variable count: $($variables.Count); screen save survived restart"
           } finally {
             if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
           }
