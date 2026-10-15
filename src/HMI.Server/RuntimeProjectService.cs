@@ -210,7 +210,53 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                             Properties = new Dictionary<string, PropertyBindingInfo> { ["text"] = new() { Source = new StaticPropertySource { Value = "报警状态" } }, ["color"] = new() { Source = new StaticPropertySource { Value = "#9CA3AF" } } },
                         },
                         new() { Id = "alarm-value", Name = "报警值", ControlType = "Text", X = 420, Y = 190, Width = 300, Height = 72,
-                            Properties = new Dictionary<string, PropertyBindingInfo> { ["text"] = new() { Source = new VariablePropertySource { VarId = "line.alarm" } }, ["color"] = new() { Source = new StaticPropertySource { Value = "#FBBF24" } }, ["fontSize"] = new() { Source = new StaticPropertySource { Value = 44 } } } }
+                            Properties = new Dictionary<string, PropertyBindingInfo> { ["text"] = new() { Source = new VariablePropertySource { VarId = "line.alarm" } }, ["color"] = new() { Source = new StaticPropertySource { Value = "#FBBF24" } }, ["fontSize"] = new() { Source = new StaticPropertySource { Value = 44 } } } },
+                        new() { Id = "run-toggle", Name = "运行切换", ControlType = "Button", X = 48, Y = 330, Width = 180, Height = 48,
+                            Properties = new Dictionary<string, PropertyBindingInfo>
+                            {
+                                ["text"] = new() { Source = new StaticPropertySource { Value = "切换设备运行" } },
+                                ["color"] = new() { Source = new StaticPropertySource { Value = "#FFFFFF" } },
+                                ["background"] = new() { Source = new StaticPropertySource { Value = "#2563EB" } },
+                                ["writeVarId"] = new() { Source = new StaticPropertySource { Value = "line.running" } },
+                                ["writeValue"] = new() { Source = new StaticPropertySource { Value = "toggle" } }
+                            }
+                        },
+                        new() { Id = "alarm-toggle", Name = "报警切换", ControlType = "Button", X = 48, Y = 394, Width = 180, Height = 48,
+                            Properties = new Dictionary<string, PropertyBindingInfo>
+                            {
+                                ["text"] = new() { Source = new StaticPropertySource { Value = "触发 / 清除报警" } },
+                                ["color"] = new() { Source = new StaticPropertySource { Value = "#FFFFFF" } },
+                                ["background"] = new() { Source = new StaticPropertySource { Value = "#B45309" } },
+                                ["writeVarId"] = new() { Source = new StaticPropertySource { Value = "line.alarm" } },
+                                ["writeValue"] = new() { Source = new StaticPropertySource { Value = "toggle" } }
+                            }
+                        },
+                        new() { Id = "target-speed-label", Name = "目标速度标签", ControlType = "Text", X = 260, Y = 294, Width = 180, Height = 28,
+                            Properties = new Dictionary<string, PropertyBindingInfo> { ["text"] = new() { Source = new StaticPropertySource { Value = "目标速度（Hz）" } }, ["color"] = new() { Source = new StaticPropertySource { Value = "#CBD5E1" } } } },
+                        new() { Id = "target-speed-input", Name = "目标速度输入", ControlType = "NumericInput", X = 260, Y = 330, Width = 180, Height = 48,
+                            Properties = new Dictionary<string, PropertyBindingInfo>
+                            {
+                                ["text"] = new() { Source = new VariablePropertySource { VarId = "line.targetSpeed" }, Direction = BindingDirection.TwoWay },
+                                ["color"] = new() { Source = new StaticPropertySource { Value = "#38D9A9" } },
+                                ["fontSize"] = new() { Source = new StaticPropertySource { Value = 24 } }
+                            }
+                        },
+                        new() { Id = "target-speed-display", Name = "目标速度显示", ControlType = "NumericDisplay", X = 260, Y = 394, Width = 180, Height = 48,
+                            Properties = new Dictionary<string, PropertyBindingInfo>
+                            {
+                                ["text"] = new() { Source = new VariablePropertySource { VarId = "line.targetSpeed" } },
+                                ["color"] = new() { Source = new StaticPropertySource { Value = "#93C5FD" } },
+                                ["fontSize"] = new() { Source = new StaticPropertySource { Value = 24 } }
+                            }
+                        },
+                        new() { Id = "alarm-lamp", Name = "报警指示灯", ControlType = "Lamp", X = 520, Y = 330, Width = 64, Height = 64,
+                            Properties = new Dictionary<string, PropertyBindingInfo>
+                            {
+                                ["color"] = new() { Source = new VariablePropertySource { VarId = "line.alarm" } }
+                            }
+                        },
+                        new() { Id = "alarm-lamp-label", Name = "报警指示灯标签", ControlType = "Text", X = 600, Y = 346, Width = 180, Height = 32,
+                            Properties = new Dictionary<string, PropertyBindingInfo> { ["text"] = new() { Source = new StaticPropertySource { Value = "报警指示灯" } }, ["color"] = new() { Source = new StaticPropertySource { Value = "#CBD5E1" } } } }
                     }
                 }
             }
