@@ -1,14 +1,38 @@
 # HMIStudio 本地运行时服务
 
-## 启动
+需要安装 .NET 10 SDK 和 Node.js 20+。
 
-需要安装 .NET 10 SDK。在仓库根目录运行：
+## 方式一：构建前端并由 ASP.NET Core 提供静态页面
+
+在仓库根目录执行：
+
+```powershell
+cd src/HMI.Web
+npm install
+npm run build
+cd ../..
+dotnet run --project src/HMI.Server
+```
+
+浏览器打开 `http://127.0.0.1:5080`。首次启动会在 `src/HMI.Server/data/demo.hmijob` 创建演示工程。加载其他工程可通过 `HMISTUDIO_PROJECT` 环境变量指定完整路径。
+
+## 方式二：前后端分别调试
+
+终端一启动后端：
 
 ```powershell
 dotnet run --project src/HMI.Server
 ```
 
-默认只监听本机地址 `http://127.0.0.1:5080`。首次启动会在 `src/HMI.Server/data/demo.hmijob` 创建演示工程；如需加载其他工程，可通过 `HMISTUDIO_PROJECT` 环境变量指定完整路径。
+终端二启动 Vite：
+
+```powershell
+cd src/HMI.Web
+npm install
+npm run dev
+```
+
+打开 `http://127.0.0.1:5173`。开发前端默认访问 `http://127.0.0.1:5080` API；可用 `VITE_API_BASE` 覆盖。
 
 ## 当前 API
 
@@ -37,6 +61,6 @@ dotnet run --project src/HMI.Server
 ## 安全与边界
 
 - 默认只绑定 loopback（本机），不向局域网公开。
-- 仅用于首版模拟驱动；此服务不建立真实 PLC 连接。
+- 首版仅使用模拟驱动，不建立真实 PLC 连接。
 - 当前尚未实现用户身份认证、角色权限和细粒度写入授权，不应直接暴露到不可信网络。
-- 浏览器编辑器和运行画面将在后续里程碑接入。
+- 当前前端为运行监控预览；完整组态编辑器、画布操作和属性绑定求值仍在后续里程碑实现。
