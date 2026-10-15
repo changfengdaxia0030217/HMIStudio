@@ -45,6 +45,36 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
+    public async Task PlcVariablesUseSimulationDriverAndTrackCommunicationQuality()
+    {
+        var drivers = new MockPlcDriverManager();
+        await using var pool = new MemoryVariablePool(drivers);
+        pool.Register(new[]
+        {
+            new VariableMeta
+            {
+                VarId = "plcSpeed",
+                Name = "PLC Speed",
+                Kind = VariableKind.Plc,
+                InitialValue = 12,
+                Source = new VariableSource { Kind = VariableKind.Plc, Channel = "S7", Address = "DB1.DBW0" }
+            }
+        });
+
+        Assert.Equal(VariableQuality.BadComm, pool.GetQuality("plcSpeed"));
+        await pool.RefreshFromDriversAsync(new[] { "plcSpeed" });
+        Assert.Equal(VariableQuality.Good, pool.GetQuality("plcSpeed"));
+        Assert.Equal(12, await pool.ReadAsync("plcSpeed"));
+
+        var write = await pool.WriteAsync("plcSpeed", 25);
+        Assert.True(write.Ok);
+        await pool.RefreshFromDriversAsync(new[] { "plcSpeed" });
+        Assert.Equal(25, await pool.ReadAsync("plcSpeed"));
+        Assert.Equal(VariableQuality.Good, pool.GetQuality("plcSpeed"));
+        await drivers.DisposeAsync();
+    }
+
+    [Fact]
     public async Task SubscriberExceptionsDoNotBreakOtherConsumers()
     {
         await using var pool = new MemoryVariablePool();
