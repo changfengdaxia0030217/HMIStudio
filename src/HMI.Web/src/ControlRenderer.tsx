@@ -46,6 +46,6 @@ export function ControlRenderer({ control, variables, selected = false, interact
       : control.controlType === "Rectangle"
         ? <span className="hmi-rect-label">{control.name}</span>
         : text}
-    {selected && <span className="hmi-control-handle" />}
+    {selected && ["nw", "n", "ne", "e", "se", "s", "sw", "w"].map(position => <span key={position} className={`hmi-control-handle handle-${position}`} />)}
   </div>;
 }
