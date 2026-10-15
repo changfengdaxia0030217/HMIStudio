@@ -89,6 +89,36 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task BadQualityDoesNotClearActiveAlarmUntilGoodQualityReturns()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+            pool.SetQuality("temperature", VariableQuality.BadComm);
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+            await Task.Delay(100);
+
+            Assert.Single(await alarms.GetActiveAsync());
+            Assert.Single(await alarms.GetHistoryAsync());
+
+            pool.SetQuality("temperature", VariableQuality.Good);
+            await WaitForHistoryCountAsync(alarms, 2);
+            Assert.Empty(await alarms.GetActiveAsync());
+            Assert.Equal(new[] { "Recovered", "Triggered" },
+                (await alarms.GetHistoryAsync(10)).Select(item => item.EventType));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task EnabledRuleWithUnknownVariableIsRejected()
     {
         var rule = CreateRules()[0];
