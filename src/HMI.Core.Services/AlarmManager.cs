@@ -301,7 +301,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         Message = reader.IsDBNull(6) ? null : reader.GetString(6),
         Value = reader.IsDBNull(7) ? null : reader.GetString(7),
         Quality = reader.GetString(8),
-        OccurredAt = DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+        OccurredAt = DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.None)
     };
 
     private static ActiveAlarm Clone(ActiveAlarm item) => new()
