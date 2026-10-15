@@ -12,6 +12,17 @@
 - 运行画面共享控件渲染器；按钮可配置写入变量和值，数值输入可绑定可写变量
 - Windows CI：前端 TypeScript 构建、.NET restore/build/test、运行时 API 与工程持久化 smoke test
 
+## 云端开发与在线预览（GitHub Codespaces）
+
+如果暂时不想在自己的电脑安装 .NET/Node.js，可以使用 Codespaces 在云端运行项目：
+
+1. 打开仓库，进入 **Code → Codespaces → Create codespace on `feature/m0-core-contracts`**。
+2. 等待云端开发容器初始化。首次初始化会安装前端依赖、构建前端并还原 .NET 依赖。
+3. 容器启动后会自动运行 HMIStudio 服务。Codespaces 检测到 **5080** 端口后，可在 **Ports** 面板打开转发网址预览。
+4. 修改代码后，前端重新构建：在终端运行 `cd src/HMI.Web && npm run build`；服务端代码修改后，停止并重新运行服务，或重启 Codespace。
+
+云端服务通过端口转发访问，默认用于开发预览，不应放入真实生产数据，也不要连接真实 PLC。Codespaces 是否可用及运行时长取决于 GitHub 账户额度。首次启动会从仓库分支创建独立云端环境，不会自动合并到 `main`。
+
 ## 快速启动（Windows）
 
 前置条件：安装 **.NET 10 SDK** 与 **Node.js 20+**，并允许 PowerShell 执行本地脚本。
