@@ -65,6 +65,11 @@ jobs:
             $writtenVariable = Invoke-RestMethod "http://127.0.0.1:5081/api/variables/line.targetSpeed" -TimeoutSec 5
             if ([double]$writtenVariable.value -ne 61.5) { throw "HMIStudio variable write did not update the live value" }
             $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($screen.controls.Count -lt 8) { throw "Demo screen is missing interactive simulator controls" }
+            $runToggle = $screen.controls | Where-Object { $_.id -eq "run-toggle" } | Select-Object -First 1
+            if (-not $runToggle -or $runToggle.properties.writeVarId.source.value -ne "line.running") { throw "Demo run button is not bound to line.running" }
+            $targetInput = $screen.controls | Where-Object { $_.id -eq "target-speed-input" } | Select-Object -First 1
+            if (-not $targetInput -or $targetInput.properties.text.source.varId -ne "line.targetSpeed") { throw "Demo numeric input is not bound to line.targetSpeed" }
             $screen.title = "CI save validation"
             $body = $screen | ConvertTo-Json -Depth 50
             $saved = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $body -TimeoutSec 5
