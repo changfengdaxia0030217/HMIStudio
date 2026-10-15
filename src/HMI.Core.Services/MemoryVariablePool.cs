@@ -24,6 +24,7 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
 
     private readonly ConcurrentDictionary<string, Slot> _slots = new();
     private readonly ConcurrentDictionary<string, VariableMeta> _metas = new();
+    private readonly IPlcDriverManager? _driverManager;
 
     // 全量串行写队列（§14.2）：所有变量写汇入同一队列，保序、保重试。
     private readonly Channel<WriteRequest> _writeQueue = Channel.CreateUnbounded<WriteRequest>();
@@ -35,8 +36,9 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
         public DateTimeOffset EnqueuedAt { get; } = DateTimeOffset.Now;
     }
 
-    public MemoryVariablePool()
+    public MemoryVariablePool(IPlcDriverManager? driverManager = null)
     {
+        _driverManager = driverManager;
         _writeLoop = Task.Run(RunWriteLoopAsync);
     }
 
@@ -55,6 +57,17 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
             };
             _slots[meta.VarId] = slot;
             _metas[meta.VarId] = meta;
+
+            // Seed the first-release mock PLC from project initial values. This remains simulation-only;
+            // real protocol drivers must be explicitly introduced by a future release.
+            if (meta.Kind == VariableKind.Plc &&
+                _driverManager is MockPlcDriverManager mockManager &&
+                !string.IsNullOrWhiteSpace(meta.Source?.Address))
+            {
+                var driver = mockManager.Resolve(string.IsNullOrWhiteSpace(meta.Source.Channel) ? "MOCK" : meta.Source.Channel);
+                if (driver is MockPlcDriver mockDriver)
+                    mockDriver.SetValue(meta.Source.Address!, NormalizeValue(meta.InitialValue));
+            }
         }
     }
 
@@ -133,6 +146,56 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     public VariableQuality GetQuality(string varId)
         => _slots.TryGetValue(varId, out var slot) ? slot.Quality : VariableQuality.BadNotExist;
 
+    /// <summary>
+    /// Refresh PLC variables in batches by protocol. Called by the subscription scheduler before emitting a cycle.
+    /// Without a configured driver manager, PLC values remain BadComm and are never treated as healthy memory values.
+    /// </summary>
+    public async Task RefreshFromDriversAsync(IReadOnlyCollection<string> varIds, CancellationToken ct = default)
+    {
+        if (_driverManager is null) return;
+
+        var groups = varIds
+            .Distinct(StringComparer.Ordinal)
+            .Select(id => _metas.TryGetValue(id, out var meta) ? (Id: id, Meta: meta) : default)
+            .Where(x => x.Meta is not null && x.Meta.Kind == VariableKind.Plc && !string.IsNullOrWhiteSpace(x.Meta.Source?.Address))
+            .GroupBy(x => string.IsNullOrWhiteSpace(x.Meta!.Source!.Channel) ? "MOCK" : x.Meta.Source.Channel, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entries = group.ToArray();
+            try
+            {
+                var driver = _driverManager.Resolve(group.Key);
+                if (driver is null || (driver.Status != LinkStatus.Connected && !await driver.ConnectAsync(ct).ConfigureAwait(false)))
+                {
+                    foreach (var entry in entries) SetQuality(entry.Id, VariableQuality.BadComm);
+                    continue;
+                }
+
+                var addresses = entries.Select(x => x.Meta!.Source!.Address!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var values = await driver.ReadBatchAsync(addresses, ct).ConfigureAwait(false);
+                foreach (var entry in entries)
+                {
+                    if (values.TryGetValue(entry.Meta!.Source!.Address!, out var value))
+                    {
+                        ApplyWrite(entry.Id, value);
+                        SetQuality(entry.Id, VariableQuality.Good);
+                    }
+                    else
+                    {
+                        SetQuality(entry.Id, VariableQuality.BadComm);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch
+            {
+                foreach (var entry in entries) SetQuality(entry.Id, VariableQuality.BadComm);
+            }
+        }
+    }
+
     /// <summary>标记指定变量质量位（通讯断/恢复用）。只落内存、不广播——变化由订阅层按 CycleMs 轮询送出（UI 唯一出口）。</summary>
     public void SetQuality(string varId, VariableQuality quality)
     {
@@ -153,7 +216,7 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
             {
                 try
                 {
-                    HandleWrite(req);
+                    await HandleWriteAsync(req).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -164,7 +227,7 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
     }
 
     /// <summary>处理单条写请求：直接落值并广播（纯 FIFO 串行，§14.2 默认 Strict）。</summary>
-    private void HandleWrite(WriteRequest req)
+    private async Task HandleWriteAsync(WriteRequest req)
     {
         if (!_slots.ContainsKey(req.VarId))
         {
@@ -176,6 +239,46 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
             req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.ReadOnly, req.RequestId, $"变量只读: {req.VarId}"));
             return;
         }
+        if (_metas.TryGetValue(req.VarId, out meta) && meta.Kind == VariableKind.Plc)
+        {
+            if (_driverManager is null || string.IsNullOrWhiteSpace(meta.Source?.Address))
+            {
+                SetQuality(req.VarId, VariableQuality.BadComm);
+                req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 模拟驱动未配置或变量地址为空"));
+                return;
+            }
+
+            try
+            {
+                var protocol = string.IsNullOrWhiteSpace(meta.Source.Channel) ? "MOCK" : meta.Source.Channel;
+                var driver = _driverManager.Resolve(protocol);
+                if (driver is null || (driver.Status != LinkStatus.Connected && !await driver.ConnectAsync().ConfigureAwait(false)))
+                {
+                    SetQuality(req.VarId, VariableQuality.BadComm);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 驱动连接失败"));
+                    return;
+                }
+
+                if (!await driver.WriteAsync(meta.Source.Address, req.Value).ConfigureAwait(false))
+                {
+                    SetQuality(req.VarId, VariableQuality.BadComm);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 驱动拒绝写入"));
+                    return;
+                }
+
+                ApplyWrite(req.VarId, req.Value);
+                SetQuality(req.VarId, VariableQuality.Good);
+                req.Tcs.TrySetResult(new WriteResult(true, WriteFailureReason.None, req.RequestId, "模拟 PLC 写入成功"));
+                return;
+            }
+            catch (Exception ex)
+            {
+                SetQuality(req.VarId, VariableQuality.BadComm);
+                req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, ex.Message));
+                return;
+            }
+        }
+
         ApplyWrite(req.VarId, req.Value);
         req.Tcs.TrySetResult(new WriteResult(true, WriteFailureReason.None, req.RequestId, "写入成功"));
     }
