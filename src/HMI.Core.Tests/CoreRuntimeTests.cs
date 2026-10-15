@@ -8,6 +8,20 @@ namespace HMI.Core.Tests;
 public sealed class CoreRuntimeTests
 {
     [Fact]
+    public void PropertySourcesRoundTripThroughStableJsonDiscriminator()
+    {
+        IPropertySource source = new VariablePropertySource { VarId = "line.speed", Index = 2 };
+        var json = System.Text.Json.JsonSerializer.Serialize<IPropertySource>(source);
+
+        Assert.Contains("\"type\":\"$var\"", json);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<IPropertySource>(json);
+
+        var variable = Assert.IsType<VariablePropertySource>(restored);
+        Assert.Equal("line.speed", variable.VarId);
+        Assert.Equal(2, variable.Index);
+    }
+
+    [Fact]
     public async Task WriteReturnsExplicitFailureForMissingAndReadOnlyVariables()
     {
         await using var pool = new MemoryVariablePool();
