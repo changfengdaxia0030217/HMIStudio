@@ -3,6 +3,7 @@ import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, P
 import "./editor.css";
 import "./runtime-screen.css";
 import { ControlRenderer, resolveControlProperty, type VariableMap } from "./ControlRenderer";
+import { CONTROL_REGISTRY, getControlDefinition } from "./ControlPropertyRegistry";
 
 const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://127.0.0.1:5080";
 type Source = { type: "$static"; value?: unknown } | { type: "$var"; varId: string; index?: number } | { type: string; [key: string]: unknown };
@@ -10,14 +11,8 @@ type Binding = { source?: Source | null; direction?: "OneWay" | "TwoWay"; depend
 type Control = { id: string; name: string; controlType: string; x: number; y: number; width: number; height: number; properties: Record<string, Binding>; eventActions?: Record<string, unknown[]> };
 type Screen = { id: string; title: string; background: string; screenType: string; width: number; height: number; controls: Control[] };
 type Variable = { varId: string; name: string; dataType: string; value: unknown; writable: boolean };
-const LIBRARY = [
-  { type: "Text", label: "文本", icon: Type, w: 180, h: 42 },
-  { type: "Button", label: "按钮", icon: MousePointer2, w: 140, h: 44 },
-  { type: "Lamp", label: "指示灯", icon: Lamp, w: 72, h: 72 },
-  { type: "NumericDisplay", label: "数值显示", icon: VariableIcon, w: 160, h: 48 },
-  { type: "NumericInput", label: "数值输入", icon: CircleDot, w: 160, h: 44 },
-  { type: "Rectangle", label: "矩形", icon: RectangleHorizontal, w: 180, h: 100 },
-] as const;
+const ICONS = { Text: Type, Button: MousePointer2, Lamp, NumericDisplay: VariableIcon, NumericInput: CircleDot, Rectangle: RectangleHorizontal } as const;
+const LIBRARY = CONTROL_REGISTRY.map(item => ({ ...item, icon: ICONS[item.type as keyof typeof ICONS] }));
 const fallbackScreen: Screen = { id: "main", title: "设备总览", background: "#111827", screenType: "Normal", width: 1280, height: 720, controls: [] };
 const staticValue = (control: Control, key: string, fallback: unknown) => {
   const source = control.properties?.[key]?.source;
@@ -26,27 +21,18 @@ const staticValue = (control: Control, key: string, fallback: unknown) => {
   return fallback;
 };
 function newControl(type: string, index: number): Control {
-  const item = LIBRARY.find(x => x.type === type) ?? LIBRARY[0];
+  const definition = getControlDefinition(type);
   const props: Record<string, Binding> = {};
-  if (type === "Text") {
-    props.text = { source: { type: "$static", value: "新建文本" } };
-    props.color = { source: { type: "$static", value: "#E5EAF3" } };
-    props.fontSize = { source: { type: "$static", value: 24 } };
-  } else if (type === "Button") {
-    props.text = { source: { type: "$static", value: "按钮" } };
-    props.color = { source: { type: "$static", value: "#FFFFFF" } };
-    props.background = { source: { type: "$static", value: "#2563EB" } };
-  } else if (type === "Lamp") {
-    props.color = { source: { type: "$static", value: "#38D9A9" } };
-  } else if (type === "NumericDisplay" || type === "NumericInput") {
-    props.text = { source: { type: "$static", value: "42.5" } };
-    props.color = { source: { type: "$static", value: "#38D9A9" } };
-    props.fontSize = { source: { type: "$static", value: 28 } };
-  } else {
-    props.color = { source: { type: "$static", value: "#334155" } };
-    props.background = { source: { type: "$static", value: "#1E293B" } };
+  for (const property of definition.properties) {
+    props[property.key] = { source: { type: "$static", value: property.defaultValue } };
   }
-  return { id: `${type.toLowerCase()}-${Date.now().toString(36)}-${index}`, name: item.label, controlType: type, x: 100 + index * 18, y: 100 + index * 18, width: item.w, height: item.h, properties: props, eventActions: {} };
+  return {
+    id: `${type.toLowerCase()}-${Date.now().toString(36)}-${index}`,
+    name: definition.label, controlType: type,
+    x: 100 + index * 18, y: 100 + index * 18,
+    width: definition.width, height: definition.height,
+    properties: props, eventActions: {},
+  };
 }
 export default function Editor({ onBack }: { onBack: () => void }) {
   const [screen, setScreen] = useState<Screen>(fallbackScreen);
@@ -159,14 +145,24 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           <div className="editor-field-grid">
             {(["x", "y", "width", "height"] as const).map(key => <label className="editor-field" key={key}><span>{{ x: "X 坐标", y: "Y 坐标", width: "宽度", height: "高度" }[key]}</span><input type="number" min={key === "width" || key === "height" ? 8 : 0} value={selected[key]} onChange={e => patchControl(selected.id, { [key]: Math.max(key === "width" || key === "height" ? 8 : 0, Number(e.target.value) || 0) })} /></label>)}
           </div>
-          {selected.controlType !== "Rectangle" && selected.controlType !== "Lamp" && <label className="editor-field"><span>显示文本</span><input value={textValue} onChange={e => patchProperty("text", e.target.value)} /></label>}
-          <label className="editor-field"><span>文本 / 指示色</span><div className="editor-color-row"><input type="color" value={/^#[0-9a-f]{6}$/i.test(colorValue(selected, "color", "#E5EAF3")) ? colorValue(selected, "color", "#E5EAF3") : "#E5EAF3"} onChange={e => patchProperty("color", e.target.value)} /><input value={colorValue(selected, "color", "#E5EAF3")} onChange={e => patchProperty("color", e.target.value)} /></div></label>
-          <label className="editor-field"><span>文字大小</span><input type="number" min={8} max={96} value={Number(resolveControlProperty(selected, "fontSize", variablesById, 18))} onChange={e => patchProperty("fontSize", Math.max(8, Math.min(96, Number(e.target.value) || 18)))} /></label>
-          <label className="editor-field"><span>文本来源</span><select value={bindingMode} onChange={e => {
-            if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
-            else patchProperty("text", textValue);
-          }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
-          {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
+          {getControlDefinition(selected.controlType).properties.map(property => {
+            if (property.key === "text") {
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><input value={textValue} onChange={e => patchProperty("text", e.target.value)} /></label>;
+            }
+            const value = String(staticValue(selected, property.key, property.defaultValue));
+            if (property.kind === "color") {
+              const color = /^#[0-9a-f]{6}$/i.test(value) ? value : String(property.defaultValue);
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div></label>;
+            }
+            return <label className="editor-field" key={property.key}><span>{property.label}</span><input type="number" min={property.min} max={property.max} step={property.step ?? 1} value={Number(resolveControlProperty(selected, property.key, variablesById, property.defaultValue))} onChange={e => patchProperty(property.key, Math.max(property.min ?? Number.MIN_SAFE_INTEGER, Math.min(property.max ?? Number.MAX_SAFE_INTEGER, Number(e.target.value) || Number(property.defaultValue))))} /></label>;
+          })}
+          {getControlDefinition(selected.controlType).properties.some(property => property.key === "text") && <>
+            <label className="editor-field"><span>文本来源</span><select value={bindingMode} onChange={e => {
+              if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
+              else patchProperty("text", textValue);
+            }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
+            {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
+          </>}
           <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定已写入工程模型。运行时动态求值与类型校验将在后续阶段接入。</span></div>
           <button className="editor-delete" onClick={removeSelected}>删除此控件</button>
         </>}
