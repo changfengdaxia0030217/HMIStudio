@@ -20,7 +20,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly SemaphoreSlim _stateGate = new(1, 1);
     private readonly Dictionary<string, ActiveAlarm> _activeById = new(StringComparer.Ordinal);
-    private readonly Task _worker;
+    private Task _worker = Task.CompletedTask;
     private bool _disposed;
 
     private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath)
@@ -30,7 +30,6 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
             .ToArray();
         _connectionString = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(databasePath) }.ToString();
         _changeLease = _pool.RegisterInternalChangeConsumer(package => _changes.Writer.TryWrite(package));
-        _worker = Task.Run(ProcessChangesAsync);
     }
 
     public static async Task<AlarmManager> CreateAsync(
@@ -48,6 +47,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         try
         {
             await manager.InitializeAsync(ct).ConfigureAwait(false);
+            manager._worker = Task.Run(manager.ProcessChangesAsync);
             foreach (var rule in manager._rules)
             {
                 if (pool.TryGetValue(rule.VarId, out var value))
