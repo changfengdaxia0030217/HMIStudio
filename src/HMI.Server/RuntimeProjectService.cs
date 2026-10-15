@@ -66,7 +66,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             _pool = new MemoryVariablePool(_drivers);
             _pool.Register(_project.Variables);
             _subscriptions = new VariableSubscriptionManager(_pool, ex => _logger.LogWarning(ex, "变量订阅消费者异常"));
-            _alarms = await AlarmManager.CreateAsync(_pool, _project.AlarmRules, Path.Combine(dataDirectory, "alarms.sqlite"), cancellationToken);
+            _alarms = await AlarmManager.CreateAsync(_pool, _project.AlarmRules, Path.Combine(dataDirectory, "alarms.sqlite"), cancellationToken, ex => _logger.LogError(ex, "报警事件处理失败"));
             _startedAt = DateTimeOffset.UtcNow;
 
             _logger.LogInformation("HMIStudio 工程已加载: {ProjectPath}; variables={VariableCount}; screens={ScreenCount}",
