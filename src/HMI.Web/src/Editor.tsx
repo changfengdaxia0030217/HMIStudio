@@ -110,16 +110,33 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     if (!previous) return;
     historyRef.current.future.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
     liveScreenRef.current = previous; setScreen(previous); setDirty(true); setHistoryVersion(v => v + 1);
-    setSelectedId(id => previous.controls.some(item => item.id === id) ? id : null);\n    setSelectedIds(ids => ids.filter(id => previous.controls.some(item => item.id === id)));
+    setSelectedId(id => previous.controls.some(item => item.id === id) ? id : null);
+    setSelectedIds(ids => ids.filter(id => previous.controls.some(item => item.id === id)));
   };
   const redo = () => {
     const next = historyRef.current.future.pop();
     if (!next) return;
     historyRef.current.past.push(JSON.parse(JSON.stringify(liveScreenRef.current)) as Screen);
     liveScreenRef.current = next; setScreen(next); setDirty(true); setHistoryVersion(v => v + 1);
-    setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);\n    setSelectedIds(ids => ids.filter(id => next.controls.some(item => item.id === id)));
+    setSelectedId(id => next.controls.some(item => item.id === id) ? id : null);
+    setSelectedIds(ids => ids.filter(id => next.controls.some(item => item.id === id)));
   };
-  const copySelected = () => { if (selected) { clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; setHasClipboard(true); } };\n  const alignSelected = (axis: "left" | "top" | "center-x" | "center-y") => {\n    const chosen = screen.controls.filter(control => selectedIds.includes(control.id));\n    if (chosen.length < 2) return;\n    const anchor = chosen[0];\n    const updated = new Map<string, Control>();\n    for (const control of chosen) {\n      let patch: Partial<Control>;\n      if (axis === "left") patch = { x: anchor.x };\n      else if (axis === "top") patch = { y: anchor.y };\n      else if (axis === "center-x") patch = { x: Math.max(0, Math.min(1280 - control.width, Math.round((anchor.x + anchor.width / 2 - control.width / 2) / 8) * 8)) };\n      else patch = { y: Math.max(0, Math.min(720 - control.height, Math.round((anchor.y + anchor.height / 2 - control.height / 2) / 8) * 8)) };\n      updated.set(control.id, { ...control, ...patch });\n    }\n    commitScreen({ ...screen, controls: screen.controls.map(control => updated.get(control.id) ?? control) });\n  };
+  const copySelected = () => { if (selected) { clipboardRef.current = JSON.parse(JSON.stringify(selected)) as Control; setHasClipboard(true); } };
+  const alignSelected = (axis: "left" | "top" | "center-x" | "center-y") => {
+    const chosen = screen.controls.filter(control => selectedIds.includes(control.id));
+    if (chosen.length < 2) return;
+    const anchor = chosen[0];
+    const updated = new Map<string, Control>();
+    for (const control of chosen) {
+      let patch: Partial<Control>;
+      if (axis === "left") patch = { x: anchor.x };
+      else if (axis === "top") patch = { y: anchor.y };
+      else if (axis === "center-x") patch = { x: Math.max(0, Math.min(1280 - control.width, Math.round((anchor.x + anchor.width / 2 - control.width / 2) / 8) * 8)) };
+      else patch = { y: Math.max(0, Math.min(720 - control.height, Math.round((anchor.y + anchor.height / 2 - control.height / 2) / 8) * 8)) };
+      updated.set(control.id, { ...control, ...patch });
+    }
+    commitScreen({ ...screen, controls: screen.controls.map(control => updated.get(control.id) ?? control) });
+  };
   const pasteControl = () => {
     const source = clipboardRef.current; if (!source) return;
     const clone = JSON.parse(JSON.stringify(source)) as Control;
