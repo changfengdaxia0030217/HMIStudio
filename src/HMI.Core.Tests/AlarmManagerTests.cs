@@ -1,4 +1,5 @@
 using HMI.Core.Interface;
+using HMI.Core.Model;
 using HMI.Core.Services;
 using Xunit;
 
