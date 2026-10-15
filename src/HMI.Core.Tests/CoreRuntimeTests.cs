@@ -62,6 +62,7 @@ public sealed class CoreRuntimeTests
         Assert.True(Volatile.Read(ref received) > 0);
 
         await manager.UnsubscribeAsync(new[] { "temperature" });
+        await Task.Delay(50); // allow an already-started poll iteration to finish
         var countAfterUnsubscribe = Volatile.Read(ref received);
         await Task.Delay(100);
         Assert.Equal(countAfterUnsubscribe, Volatile.Read(ref received));
