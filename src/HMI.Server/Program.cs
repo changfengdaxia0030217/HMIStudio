@@ -41,9 +41,9 @@ app.MapGet("/api/variables", (RuntimeProjectService runtime) => Results.Ok(runti
 app.MapGet("/api/variables/{varId}", (string varId, RuntimeProjectService runtime) =>
 {
     var meta = runtime.Project.Variables.FirstOrDefault(v => v.VarId == varId);
-    if (meta is null) return Results.NotFound(new { error = "变量不存在", varId });
+    if (meta is null) return (IResult)Results.NotFound(new { error = "变量不存在", varId });
     runtime.Pool.TryGetValue(varId, out var value);
-    return Results.Ok(new { meta.VarId, meta.Name, meta.DataType, meta.Min, meta.Max, Writable = !meta.IsReadOnly, Value = value, Quality = runtime.Pool.GetQuality(varId).ToString() });
+    return (IResult)Results.Ok(new { meta.VarId, meta.Name, meta.DataType, meta.Min, meta.Max, Writable = !meta.IsReadOnly, Value = value, Quality = runtime.Pool.GetQuality(varId).ToString() });
 });
 app.MapPost("/api/variables/{varId}/write", async (string varId, WriteVariableRequest request, RuntimeProjectService runtime, CancellationToken ct) =>
 {
