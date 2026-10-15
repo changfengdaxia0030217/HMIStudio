@@ -59,6 +59,11 @@ jobs:
             }
             $variables = Invoke-RestMethod "http://127.0.0.1:5081/api/variables" -TimeoutSec 5
             if ($variables.Count -lt 1) { throw "HMIStudio runtime returned no variables" }
+            $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
+            $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
+            if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }
+            $writtenVariable = Invoke-RestMethod "http://127.0.0.1:5081/api/variables/line.targetSpeed" -TimeoutSec 5
+            if ([double]$writtenVariable.value -ne 61.5) { throw "HMIStudio variable write did not update the live value" }
             $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             $screen.title = "CI save validation"
             $body = $screen | ConvertTo-Json -Depth 50
@@ -87,7 +92,7 @@ jobs:
             }
             $screenAfterRestart = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             if ($screenAfterRestart.title -ne "CI save validation") { throw "HMIStudio screen changes did not survive runtime restart" }
-            Write-Host "Runtime API ready; variable count: $($variables.Count); screen save survived restart"
+            Write-Host "Runtime API ready; variable count: $($variables.Count); variable write verified; screen save survived restart"
           } finally {
             if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
           }
