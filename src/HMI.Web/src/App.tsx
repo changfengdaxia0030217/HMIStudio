@@ -139,7 +139,7 @@ export default function App() {
         <div className="nav-item"><SlidersHorizontal size={17} />变量监视</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("screen")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("screen"); }}><Activity size={17} />运行画面</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
-        <div className={`nav-item editor-nav-item ${view === "alarms" ? "active" : ""}`} role="button" tabIndex={0} onClick={() => setView("alarms")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("alarms"); }}><AlertTriangle size={17} />报警中心 <span className="nav-count">{alarm ? "1" : "0"}</span></div>
+        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("alarms")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("alarms"); }}><AlertTriangle size={17} />报警中心 <span className="nav-count">{alarm ? "1" : "0"}</span></div>
         <div className="nav-item"><Cpu size={17} />驱动诊断</div>
         <div className="sidebar-bottom">
           <div className="security-note"><ShieldCheck size={16} /><span>本机模拟运行环境<br /><small>未连接真实 PLC</small></span></div>
