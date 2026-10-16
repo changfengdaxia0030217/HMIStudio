@@ -14,6 +14,32 @@ type Variable = { varId: string; name: string; dataType: string; value: unknown;
 const ICONS = { Text: Type, Button: MousePointer2, Lamp, NumericDisplay: VariableIcon, NumericInput: CircleDot, Rectangle: RectangleHorizontal } as const;
 const LIBRARY = CONTROL_REGISTRY.map(item => ({ ...item, icon: ICONS[item.type as keyof typeof ICONS] }));
 const fallbackScreen: Screen = { id: "main", title: "设备总览", background: "#111827", screenType: "Normal", width: 1280, height: 720, controls: [] };
+function validateScreenBindings(screen: Screen, variables: Variable[], screens: Array<{ id: string; title: string }>): string[] {
+  const variableIds = new Set(variables.map(variable => variable.varId));
+  const screenIds = new Set(screens.map(item => item.id));
+  const errors: string[] = [];
+  for (const control of screen.controls) {
+    for (const [key, binding] of Object.entries(control.properties ?? {})) {
+      const source = binding?.source;
+      if (source?.type === "$var") {
+        const varId = String(source.varId ?? "").trim();
+        if (!varId) errors.push(`控件“${control.name}”的属性“${key}”未选择变量。`);
+        else if (!variableIds.has(varId)) errors.push(`控件“${control.name}”的属性“${key}”引用了不存在的变量“${varId}”。`);
+      }
+    }
+    const writeSource = control.properties?.writeVarId?.source;
+    if (writeSource?.type === "$static") {
+      const varId = String(writeSource.value ?? "").trim();
+      if (varId && !variableIds.has(varId)) errors.push(`按钮“${control.name}”写入了不存在的变量“${varId}”。`);
+    }
+    const navigationSource = control.properties?.navigateToScreenId?.source;
+    if (navigationSource?.type === "$static") {
+      const screenId = String(navigationSource.value ?? "").trim();
+      if (screenId && !screenIds.has(screenId)) errors.push(`控件“${control.name}”跳转到不存在的画面“${screenId}”。`);
+    }
+  }
+  return errors;
+}
 const staticValue = (control: Control, key: string, fallback: unknown) => {
   const source = control.properties?.[key]?.source;
   if (source?.type === "$static") return source.value ?? fallback;
@@ -205,6 +231,11 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     } finally { setSaving(false); }
   };
   const save = async () => {
+    const bindingErrors = validateScreenBindings(screen, variables, screenList);
+    if (bindingErrors.length) {
+      setMessage(`保存前发现 ${bindingErrors.length} 个变量/画面绑定问题：${bindingErrors.slice(0, 3).join("；")}${bindingErrors.length > 3 ? "；请修复其余问题后重试" : ""}`);
+      return;
+    }
     setSaving(true); setMessage("");
     try {
       const response = await fetch(`${API}/api/screens/${encodeURIComponent(screen.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(screen) });
