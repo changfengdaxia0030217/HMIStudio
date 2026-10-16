@@ -27,6 +27,7 @@ export default function VariablesMonitor({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState("");
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [online, setOnline] = useState(false);
+  const [streamConnected, setStreamConnected] = useState(false);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -41,9 +42,16 @@ export default function VariablesMonitor({ onBack }: { onBack: () => void }) {
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
+    if (online) return;
+    const retry = window.setInterval(() => { void load(); }, 5000);
+    return () => window.clearInterval(retry);
+  }, [online, load]);
+  useEffect(() => {
     if (!online || variables.length === 0) return;
     const ids = variables.map(v => v.varId);
     const stream = new EventSource(`${API}/api/runtime/stream?varIds=${encodeURIComponent(ids.join(","))}`);
+    stream.onopen = () => setStreamConnected(true);
+    stream.onerror = () => setStreamConnected(false);
     stream.addEventListener("variable", event => {
       try {
         const update = JSON.parse((event as MessageEvent).data) as {varId:string;value:unknown;quality:Quality;serverTimestamp:string};
@@ -51,8 +59,7 @@ export default function VariablesMonitor({ onBack }: { onBack: () => void }) {
         setLastUpdate(new Date(update.serverTimestamp));
       } catch { /* Ignore malformed stream messages. */ }
     });
-    stream.onerror = () => setOnline(false);
-    return () => stream.close();
+    return () => { stream.close(); setStreamConnected(false); };
   }, [online, variables.length]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -72,7 +79,7 @@ export default function VariablesMonitor({ onBack }: { onBack: () => void }) {
     </div>
     <section className="panel alarm-table-panel">
       <div className="panel-heading"><div><h2>实时变量表</h2><p>实时订阅变量更新；值与质量位分别显示</p></div><span className="table-count">{filtered.length} / {variables.length} 个变量</span></div>
-      <div className="variable-monitor-toolbar"><label className="variable-search"><Search size={15}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索变量名称、ID 或类型"/></label><span className={online ? "variable-live good" : "variable-live"}><i/>{online ? "实时连接" : "连接中断"}</span></div>
+      <div className="variable-monitor-toolbar"><label className="variable-search"><Search size={15}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索变量名称、ID 或类型"/></label><span className={streamConnected ? "variable-live good" : "variable-live"}><i/>{streamConnected ? "实时连接" : online ? "实时重连中" : "等待服务"}</span></div>
       <div className="table-wrap"><table><thead><tr><th>变量名称</th><th>变量 ID</th><th>数据类型</th><th>当前值</th><th>最小值</th><th>最大值</th><th>质量位</th><th>采样周期</th><th>权限</th></tr></thead><tbody>
         {filtered.map(v => <tr key={v.varId}><td className="variable-name">{v.name}</td><td><code>{v.varId}</code></td><td><span className="type-tag">{v.dataType}</span></td><td className="value-cell">{showValue(v.value)}</td><td>{v.min ?? "—"}</td><td>{v.max ?? "—"}</td><td><span className={`quality-tag ${v.quality === "Good" ? "q-good" : "q-bad"}`}><i/>{qualityName(v.quality)}</span></td><td>{v.cycleMs} ms</td><td>{v.writable ? <span className="writable">可写</span> : <span className="readonly">只读</span>}</td></tr>)}
         {!filtered.length && <tr><td colSpan={9} className="empty-state">{loading ? "正在读取变量…" : query ? "没有匹配的变量" : "工程中暂无变量"}</td></tr>}
