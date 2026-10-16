@@ -271,9 +271,25 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
                 if (control.Properties.TryGetValue("writeVarId", out var writeBinding) &&
                     TryGetStaticPropertyString(writeBinding?.Source, out var writeVarId) &&
-                    !string.IsNullOrWhiteSpace(writeVarId) &&
-                    !Project.Variables.Any(variable => string.Equals(variable.VarId, writeVarId, StringComparison.Ordinal)))
-                    errors.Add($"按钮 {control.Id} 写入了不存在的变量: {writeVarId}");
+                    !string.IsNullOrWhiteSpace(writeVarId))
+                {
+                    var writeVariable = Project.Variables.FirstOrDefault(variable =>
+                        string.Equals(variable.VarId, writeVarId, StringComparison.Ordinal));
+                    if (writeVariable is null)
+                    {
+                        errors.Add($"按钮 {control.Id} 写入了不存在的变量: {writeVarId}");
+                    }
+                    else
+                    {
+                        if (writeVariable.IsReadOnly)
+                            errors.Add($"按钮 {control.Id} 不能写入只读变量: {writeVarId}");
+
+                        if (control.Properties.TryGetValue("writeValue", out var valueBinding) &&
+                            TryGetStaticPropertyValue(valueBinding?.Source, out var writeValue) &&
+                            !IsCompatibleWriteValue(writeVariable, writeValue))
+                            errors.Add($"按钮 {control.Id} 的写入值与变量 {writeVarId} 的数据类型或范围不匹配");
+                    }
+                }
 
                 if (control.Properties.TryGetValue("navigateToScreenId", out var navigationBinding) &&
                     TryGetStaticPropertyString(navigationBinding?.Source, out var targetScreenId) &&
@@ -301,6 +317,64 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         {
             _saveGate.Release();
         }
+    }
+
+    private static bool TryGetStaticPropertyValue(IPropertySource? source, out object? value)
+    {
+        value = null;
+        if (source is not StaticPropertySource staticSource) return false;
+        value = staticSource.Value switch
+        {
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+            JsonElement { ValueKind: JsonValueKind.True } => true,
+            JsonElement { ValueKind: JsonValueKind.False } => false,
+            JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetDouble(out var number) => number,
+            JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } => null,
+            JsonElement element => element.ToString(),
+            _ => staticSource.Value
+        };
+        return true;
+    }
+
+    private static bool IsCompatibleWriteValue(VariableMeta variable, object? value)
+    {
+        var type = variable.DataType.Trim().ToLowerInvariant();
+        if (value is string text)
+        {
+            if (string.Equals(text, "toggle", StringComparison.OrdinalIgnoreCase))
+                return type == "bool";
+            if (type == "bool")
+                return bool.TryParse(text, out _);
+            if (type is "byte" or "int" or "dint" or "float" or "double" or "real")
+            {
+                if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                    return false;
+                return IsNumericWriteValueInRange(variable, type, parsed);
+            }
+            return type == "string";
+        }
+
+        if (type == "bool") return value is bool;
+        if (type == "string") return value is string;
+        if (type is not ("byte" or "int" or "dint" or "float" or "double" or "real") ||
+            value is not (byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal))
+            return false;
+
+        var number = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+        return IsNumericWriteValueInRange(variable, type, number);
+    }
+
+    private static bool IsNumericWriteValueInRange(VariableMeta variable, string type, double value)
+    {
+        if (!double.IsFinite(value)) return false;
+        if (type is "byte" or "int" or "dint" && Math.Truncate(value) != value) return false;
+
+        var min = type switch { "byte" => 0d, "int" => (double)short.MinValue, "dint" => (double)int.MinValue, _ => double.NegativeInfinity };
+        var max = type switch { "byte" => (double)byte.MaxValue, "int" => (double)short.MaxValue, "dint" => (double)int.MaxValue, _ => double.PositiveInfinity };
+        return value >= min && value <= max &&
+               (!variable.Min.HasValue || value >= variable.Min.Value) &&
+               (!variable.Max.HasValue || value <= variable.Max.Value);
     }
 
     private static bool TryGetStaticPropertyString(IPropertySource? source, out string value)
