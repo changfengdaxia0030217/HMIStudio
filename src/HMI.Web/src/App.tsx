@@ -85,23 +85,14 @@ export default function App() {
         if (!response.ok) return;
         const snapshot = await response.json() as Variable[];
         if (cancelled || !Array.isArray(snapshot)) return;
-        setVariables(previous => {
-          const priorById = new Map(previous.map(item => [item.varId, item]));
-          return snapshot.map(item => {
-            const prior = priorById.get(item.varId);
-            // Keep a newer streamed sample if it arrived after this snapshot request began.
-            return prior && lastUpdate && prior.varId === item.varId
-              ? { ...item, value: prior.value, quality: prior.quality }
-              : item;
-          });
-        });
+        setVariables(snapshot);
       } catch {
         // The main connection indicator is driven by /api/health; SSE reports its own status.
       }
     };
     const interval = window.setInterval(() => { void refreshSnapshot(); }, 10000);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [online, lastUpdate]);
+  }, [online]);
 
   const refreshAlarmCount = useCallback(async () => {
     try {
