@@ -51,6 +51,7 @@ export function ControlRenderer({ control, variables, selected = false, interact
   const inputSource = control.properties?.text?.source;
   const inputVarId = inputSource?.type === "$var" ? String(inputSource.varId ?? "") : "";
   const inputVariable = inputVarId ? variables[inputVarId] : undefined;
+  const inputNumericTypeValid = Boolean(inputVariable && ["byte", "int", "dint", "float", "double", "real"].includes(String(inputVariable.dataType ?? "").toLowerCase()));
   const [draft, setDraft] = useState(String(inputVariable?.value ?? text));
   const editing = useRef(false);
   const [inputError, setInputError] = useState("");
@@ -93,14 +94,14 @@ export function ControlRenderer({ control, variables, selected = false, interact
           onWrite(targetVarId, parseWriteValue(writeValue, current));
         }}>{text}</button>
       : runtime && control.controlType === "NumericInput"
-        ? <input className="hmi-runtime-number" type="number" value={draft} min={inputVariable?.min ?? undefined} max={inputVariable?.max ?? undefined} step={inputVariable?.dataType?.toLowerCase() === "int" || inputVariable?.dataType?.toLowerCase() === "dint" || inputVariable?.dataType?.toLowerCase() === "byte" ? 1 : "any"} aria-invalid={Boolean(inputError)} disabled={!inputVariable?.writable || !onWrite || inputQualityBad} title={inputQualityBad ? (inputVariable?.quality === "BadComm" ? "通讯异常，已禁用写入" : inputVariable?.quality === "Uncertain" ? "变量质量不确定，已禁用写入" : "变量不可用，已禁用写入") : inputError || undefined}
+        ? <input className="hmi-runtime-number" type="number" value={draft} min={inputVariable?.min ?? undefined} max={inputVariable?.max ?? undefined} step={inputVariable?.dataType?.toLowerCase() === "int" || inputVariable?.dataType?.toLowerCase() === "dint" || inputVariable?.dataType?.toLowerCase() === "byte" ? 1 : "any"} aria-invalid={Boolean(inputError)} disabled={!inputVariable?.writable || !inputNumericTypeValid || !onWrite || inputQualityBad} title={!inputNumericTypeValid && inputVariable ? "绑定变量不是数值类型，已禁用输入" : inputQualityBad ? (inputVariable?.quality === "BadComm" ? "通讯异常，已禁用写入" : inputVariable?.quality === "Uncertain" ? "变量质量不确定，已禁用写入" : "变量不可用，已禁用写入") : inputError || undefined}
             onPointerDown={event => event.stopPropagation()}
             onFocus={() => { editing.current = true; }}
             onChange={event => { setDraft(event.target.value); setInputError(""); }}
             onBlur={() => {
               editing.current = false;
               const value = Number(draft);
-              if (!inputVarId || !inputVariable?.writable || !onWrite || inputQualityBad || draft.trim() === "" || !Number.isFinite(value)) {
+              if (!inputVarId || !inputVariable?.writable || !inputNumericTypeValid || !onWrite || inputQualityBad || draft.trim() === "" || !Number.isFinite(value)) {
                 setDraft(String(inputVariable?.value ?? text));
                 return;
               }
