@@ -251,11 +251,75 @@ app.MapPost("/api/runtime/mock-values", (MockValueRequest request, RuntimeProjec
     if (driver is null)
         return (IResult)Results.BadRequest(new { error = "模拟驱动不可用", protocol });
 
-    driver.SetValue(address, NormalizeJsonValue(request.Value));
+    var mappedVariables = runtime.Project.Variables
+        .Where(variable => variable.Kind == VariableKind.Plc &&
+                           string.Equals(variable.Source?.Channel, protocol, StringComparison.OrdinalIgnoreCase) &&
+                           string.Equals(variable.Source?.Address, address, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    if (mappedVariables.Length == 0)
+        return (IResult)Results.BadRequest(new { error = "地址未映射到任何 PLC 变量", protocol, address });
+
+    var value = NormalizeJsonValue(request.Value);
+    foreach (var variable in mappedVariables)
+    {
+        if (!IsMockValueCompatible(variable.DataType, value, variable.Min, variable.Max, out var validationError))
+            return (IResult)Results.BadRequest(new { error = validationError, protocol, address, varId = variable.VarId });
+    }
+
+    driver.SetValue(address, value);
     return (IResult)Results.Ok(new { ok = true, protocol, address, request.Value });
 });
 
 app.Run();
+
+static bool IsMockValueCompatible(string dataType, object? value, double? min, double? max, out string error)
+{
+    var type = dataType.Trim().ToLowerInvariant();
+    error = $"注入值与变量数据类型 {dataType} 不匹配";
+
+    if (type == "bool") return value is bool;
+    if (type == "string") return value is string;
+
+    if (type is not ("byte" or "int" or "dint" or "float" or "double" or "real"))
+        return false;
+
+    if (value is not (byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal))
+        return false;
+
+    var number = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+    if (!double.IsFinite(number)) return false;
+
+    if ((type is "byte" or "int" or "dint") && Math.Truncate(number) != number)
+    {
+        error = $"数据类型 {dataType} 需要整数";
+        return false;
+    }
+
+    var typeMin = type switch
+    {
+        "byte" => (double)byte.MinValue,
+        "int" => (double)short.MinValue,
+        "dint" => (double)int.MinValue,
+        "float" => -(double)float.MaxValue,
+        _ => double.NegativeInfinity
+    };
+    var typeMax = type switch
+    {
+        "byte" => (double)byte.MaxValue,
+        "int" => (double)short.MaxValue,
+        "dint" => (double)int.MaxValue,
+        "float" => (double)float.MaxValue,
+        _ => double.PositiveInfinity
+    };
+
+    if (number < typeMin || number > typeMax || (min.HasValue && number < min.Value) || (max.HasValue && number > max.Value))
+    {
+        error = $"注入值 {number} 超出变量数据类型或配置量程";
+        return false;
+    }
+
+    return true;
+}
 
 static object? NormalizeJsonValue(JsonElement value) => value.ValueKind switch
 {
