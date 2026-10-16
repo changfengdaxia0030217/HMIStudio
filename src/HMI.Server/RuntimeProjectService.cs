@@ -260,6 +260,26 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                 else if (control.X < 0 || control.Y < 0 || control.Width <= 0 || control.Height <= 0 ||
                          control.X + control.Width > Project.BaseWidth || control.Y + control.Height > Project.BaseHeight)
                     errors.Add($"控件 {control.Id} 超出画布边界或尺寸无效");
+
+                foreach (var property in control.Properties)
+                {
+                    if (property.Value?.Source is VariablePropertySource variableSource &&
+                        (string.IsNullOrWhiteSpace(variableSource.VarId) ||
+                         !Project.Variables.Any(variable => string.Equals(variable.VarId, variableSource.VarId, StringComparison.Ordinal))))
+                        errors.Add($"控件 {control.Id} 的属性 {property.Key} 引用了不存在的变量: {variableSource.VarId}");
+                }
+
+                if (control.Properties.TryGetValue("writeVarId", out var writeBinding) &&
+                    TryGetStaticPropertyString(writeBinding?.Source, out var writeVarId) &&
+                    !string.IsNullOrWhiteSpace(writeVarId) &&
+                    !Project.Variables.Any(variable => string.Equals(variable.VarId, writeVarId, StringComparison.Ordinal)))
+                    errors.Add($"按钮 {control.Id} 写入了不存在的变量: {writeVarId}");
+
+                if (control.Properties.TryGetValue("navigateToScreenId", out var navigationBinding) &&
+                    TryGetStaticPropertyString(navigationBinding?.Source, out var targetScreenId) &&
+                    !string.IsNullOrWhiteSpace(targetScreenId) &&
+                    !Project.Screens.Any(target => string.Equals(target.Id, targetScreenId, StringComparison.Ordinal)))
+                    errors.Add($"控件 {control.Id} 跳转目标不存在: {targetScreenId}");
             }
 
             if (errors.Count > 0) return errors;
@@ -280,6 +300,23 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         finally
         {
             _saveGate.Release();
+        }
+    }
+
+    private static bool TryGetStaticPropertyString(IPropertySource? source, out string value)
+    {
+        value = string.Empty;
+        if (source is not StaticPropertySource staticSource) return false;
+        switch (staticSource.Value)
+        {
+            case string text:
+                value = text;
+                return true;
+            case JsonElement { ValueKind: JsonValueKind.String } element:
+                value = element.GetString() ?? string.Empty;
+                return true;
+            default:
+                return false;
         }
     }
 
