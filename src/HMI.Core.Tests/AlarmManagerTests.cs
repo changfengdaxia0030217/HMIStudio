@@ -135,6 +135,14 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task EnabledRuleWithNullOperatorIsRejected()
+    {
+        var rule = CreateRules()[0];
+        rule.Operator = null!;
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
     public async Task DuplicateEnabledRuleIdsAreRejected()
     {
         var first = CreateRules()[0];
