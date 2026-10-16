@@ -170,6 +170,40 @@ public sealed class ProjectStorageTests
     }
 
     [Fact]
+    public async Task ValidateReportsInvalidEnabledAlarmRules()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var path = Path.Combine(directory, "invalid-alarms.hmijob");
+            var project = CreateValidProject();
+            project.AlarmRules.Add(new AlarmRule
+            {
+                Id = "invalid-rule",
+                Name = "",
+                VarId = "missing.variable",
+                Operator = "LIKE",
+                Value = new { nested = true },
+                Enabled = true
+            });
+
+            await File.WriteAllTextAsync(path, HmiJson.Serialize(project));
+
+            var errors = await new ProjectStorage().ValidateAsync(path);
+
+            Assert.Contains(errors, e => e.Contains("报警规则 invalid-rule 的名称不能为空"));
+            Assert.Contains(errors, e => e.Contains("引用了不存在的变量: missing.variable"));
+            Assert.Contains(errors, e => e.Contains("比较运算符无效"));
+            Assert.Contains(errors, e => e.Contains("比较值必须是字符串、布尔值或有限数值"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ValidatePropagatesCancellation()
     {
         var directory = CreateTempDirectory();

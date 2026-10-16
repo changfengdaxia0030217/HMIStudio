@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HMI.Core.Interface;
 using HMI.Core.Model;
 
@@ -140,6 +141,29 @@ public sealed class ProjectStorage : IProjectStorage
                 if (v.DebounceMs < 0)
                     errors.Add($"变量 {v.VarId} 的防抖时间不能小于 0");
             }
+
+            var allowedAlarmOperators = new HashSet<string>(StringComparer.Ordinal)
+                { ">", ">=", "<", "<=", "==", "=", "!=", "<>" };
+            var alarmIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var rule in p.AlarmRules.Where(rule => rule.Enabled))
+            {
+                if (string.IsNullOrWhiteSpace(rule.Id))
+                    errors.Add("启用的报警规则必须设置 Id");
+                else if (!alarmIds.Add(rule.Id.Trim()))
+                    errors.Add($"报警规则 Id 重复: {rule.Id}");
+
+                if (string.IsNullOrWhiteSpace(rule.Name))
+                    errors.Add($"报警规则 {rule.Id} 的名称不能为空");
+                if (string.IsNullOrWhiteSpace(rule.VarId))
+                    errors.Add($"报警规则 {rule.Id} 的变量 Id 不能为空");
+                else if (!p.Variables.Any(variable => string.Equals(variable.VarId, rule.VarId, StringComparison.Ordinal)))
+                    errors.Add($"报警规则 {rule.Id} 引用了不存在的变量: {rule.VarId}");
+
+                if (string.IsNullOrWhiteSpace(rule.Operator) || !allowedAlarmOperators.Contains(rule.Operator.Trim()))
+                    errors.Add($"报警规则 {rule.Id} 的比较运算符无效: {rule.Operator}");
+                if (!IsValidAlarmThreshold(rule.Value))
+                    errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或有限数值");
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -151,6 +175,25 @@ public sealed class ProjectStorage : IProjectStorage
         }
 
         return errors;
+    }
+
+    private static bool IsValidAlarmThreshold(object? value)
+    {
+        if (value is null) return false;
+        if (value is JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String or JsonValueKind.True or JsonValueKind.False => true,
+                JsonValueKind.Number => element.TryGetDouble(out var number) && double.IsFinite(number),
+                _ => false
+            };
+        }
+
+        if (value is string or bool) return true;
+        if (value is byte or sbyte or short or ushort or int or uint or long or ulong or decimal) return true;
+        return value is float single && float.IsFinite(single) ||
+               value is double numberValue && double.IsFinite(numberValue);
     }
 
     private static void ValidatePropertySource(
