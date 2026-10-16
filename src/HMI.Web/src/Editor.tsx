@@ -411,7 +411,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
                   <option value="variable" disabled={!booleanVariables.length}>绑定布尔变量（驱动指示灯颜色）</option>
                 </select>
                 {colorIsVariable
-                  ? <label className="editor-field"><span>颜色绑定变量</span><select value={String(colorSource?.type === "$var" ? colorSource.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{booleanVariables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>
+                  ? <label className="editor-field"><span>颜色绑定变量</span><select disabled={!booleanVariables.length} value={String(colorSource?.type === "$var" ? colorSource.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}><option value="">{booleanVariables.length ? "请选择布尔变量" : "暂无布尔变量"}</option>{booleanVariables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select>{!booleanVariables.length && <small>请先创建 bool 类型变量，才能用变量驱动颜色。</small>}</label>
                   : <div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input aria-label={property.label} value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div>}
               </div>;
             }
@@ -422,14 +422,14 @@ export default function Editor({ onBack }: { onBack: () => void }) {
               if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
               else patchProperty("text", textValue);
             }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
-            {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>}
+            {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select disabled={!variables.length} value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}><option value="">{variables.length ? "请选择变量" : "暂无可用变量"}</option>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select>{!variables.length && <small>请先在变量管理中创建变量，再启用动态绑定。</small>}</label>}
           </>}
           <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定会在运行画面实时求值；按钮可配置变量写入，数值输入可绑定可写变量。</span></div>
           <button className="editor-delete" onClick={removeSelected}>删除此控件</button>
         </>}
       </aside>
     </div>
-    {message && <div className={`editor-toast ${message.includes("失败") || message.includes("不可用") ? "error" : ""} `} role="status">{message}<button onClick={() => setMessage("")}>关闭</button></div>}
+    {message && <div className={`editor-toast ${message.includes("失败") || message.includes("不可用") || message.includes("问题") || message.includes("不存在") || message.includes("不能为空") ? "error" : ""} `} role="status">{message}<button onClick={() => setMessage("")}>关闭</button></div>}
   </div>;
 }
 function colorValue(control: Control, key: string, fallback: string) { return String(staticValue(control, key, fallback)); }
