@@ -7,7 +7,7 @@ export type ScreenControl = {
   id: string; name: string; controlType: string; x: number; y: number; width: number; height: number;
   properties: Record<string, BoundProperty>;
 };
-export type RuntimeVariable = { varId: string; name?: string; value: unknown; quality?: string; writable?: boolean };
+export type RuntimeVariable = { varId: string; name?: string; value: unknown; quality?: string; writable?: boolean; min?: number | null; max?: number | null; dataType?: string };
 export type VariableMap = Record<string, RuntimeVariable | undefined>;
 
 export function resolveControlProperty(control: ScreenControl, key: string, variables: VariableMap, fallback: unknown): unknown {
@@ -50,12 +50,17 @@ export function ControlRenderer({ control, variables, selected = false, interact
   const inputVariable = inputVarId ? variables[inputVarId] : undefined;
   const [draft, setDraft] = useState(String(inputVariable?.value ?? text));
   const editing = useRef(false);
+  const [inputError, setInputError] = useState("");
   useEffect(() => {
     if (!editing.current) setDraft(String(inputVariable?.value ?? text));
   }, [inputVariable?.value, text]);
   const targetVarId = String(resolveControlProperty(control, "writeVarId", variables, "") ?? "");
   const writeValue = resolveControlProperty(control, "writeValue", variables, "toggle");
   const navigateToScreenId = String(resolveControlProperty(control, "navigateToScreenId", variables, "") ?? "").trim();
+  const writeVariable = targetVarId ? variables[targetVarId] : undefined;
+  const writeQualityBad = Boolean(writeVariable?.quality && writeVariable.quality !== "Good");
+  const buttonWriteBlocked = runtime && control.controlType === "Button" && !navigateToScreenId && Boolean(targetVarId) && (!writeVariable?.writable || writeQualityBad);
+  const inputQualityBad = Boolean(inputVariable?.quality && inputVariable.quality !== "Good");
   const boundVariableIds = [...new Set(Object.values(control.properties ?? {})
     .map(property => property?.source)
     .filter((source): source is BoundSource => source?.type === "$var")
@@ -75,7 +80,7 @@ export function ControlRenderer({ control, variables, selected = false, interact
   };
   return <div className={`hmi-control control-${control.controlType.toLowerCase()} ${selected ? "selected" : ""} ${degradedVariable ? "quality-degraded" : ""} ${className}`} style={style} onPointerDown={onPointerDown} data-control-id={control.id} data-quality-label={qualityLabel} title={qualityLabel || undefined}>
     {runtime && control.controlType === "Button"
-      ? <button type="button" className="hmi-runtime-button" onPointerDown={event => event.stopPropagation()} onClick={() => {
+      ? <button type="button" className="hmi-runtime-button" disabled={buttonWriteBlocked} title={buttonWriteBlocked ? (writeQualityBad ? "变量质量异常，已禁用写入" : "目标变量不可写，已禁用操作") : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => {
           if (navigateToScreenId) {
             onNavigate?.(navigateToScreenId);
             return;
@@ -85,21 +90,36 @@ export function ControlRenderer({ control, variables, selected = false, interact
           onWrite(targetVarId, parseWriteValue(writeValue, current));
         }}>{text}</button>
       : runtime && control.controlType === "NumericInput"
-        ? <input className="hmi-runtime-number" type="number" value={draft} disabled={!inputVariable?.writable || !onWrite || Boolean(inputVariable?.quality && inputVariable.quality !== "Good")} title={inputVariable?.quality && inputVariable.quality !== "Good" ? (inputVariable.quality === "BadComm" ? "通讯异常，已禁用写入" : inputVariable.quality === "Uncertain" ? "变量质量不确定，已禁用写入" : "变量不可用，已禁用写入") : undefined}
+        ? <input className="hmi-runtime-number" type="number" value={draft} min={inputVariable?.min ?? undefined} max={inputVariable?.max ?? undefined} step={inputVariable?.dataType?.toLowerCase() === "int" || inputVariable?.dataType?.toLowerCase() === "dint" || inputVariable?.dataType?.toLowerCase() === "byte" ? 1 : "any"} aria-invalid={Boolean(inputError)} disabled={!inputVariable?.writable || !onWrite || inputQualityBad} title={inputQualityBad ? (inputVariable?.quality === "BadComm" ? "通讯异常，已禁用写入" : inputVariable?.quality === "Uncertain" ? "变量质量不确定，已禁用写入" : "变量不可用，已禁用写入") : inputError || undefined}
             onPointerDown={event => event.stopPropagation()}
             onFocus={() => { editing.current = true; }}
-            onChange={event => setDraft(event.target.value)}
+            onChange={event => { setDraft(event.target.value); setInputError(""); }}
             onBlur={() => {
               editing.current = false;
               const value = Number(draft);
-              if (inputVarId && inputVariable?.writable && onWrite && draft.trim() !== "" && Number.isFinite(value)) onWrite(inputVarId, value);
-              else setDraft(String(inputVariable?.value ?? text));
+              if (!inputVarId || !inputVariable?.writable || !onWrite || inputQualityBad || draft.trim() === "" || !Number.isFinite(value)) {
+                setDraft(String(inputVariable?.value ?? text));
+                return;
+              }
+              if (inputVariable.min != null && value < inputVariable.min) {
+                setInputError(`最小允许值为 ${inputVariable.min}`);
+                setDraft(String(inputVariable.value ?? text));
+                return;
+              }
+              if (inputVariable.max != null && value > inputVariable.max) {
+                setInputError(`最大允许值为 ${inputVariable.max}`);
+                setDraft(String(inputVariable.value ?? text));
+                return;
+              }
+              setInputError("");
+              onWrite(inputVarId, value);
             }} />
       : control.controlType === "Lamp"
         ? <span className="hmi-lamp" style={{ background: color, boxShadow: `0 0 20px ${color}, inset 0 0 8px #fff5` }} />
         : control.controlType === "Rectangle"
           ? <span className="hmi-rect-label">{control.name}</span>
           : text}
+    {inputError && runtime && control.controlType === "NumericInput" && <span className="hmi-runtime-input-error" role="alert">{inputError}</span>}
     {selected && ["nw", "n", "ne", "e", "se", "s", "sw", "w"].map(position => <span key={position} className={`hmi-control-handle handle-${position}`} />)}
   </div>;
 }
