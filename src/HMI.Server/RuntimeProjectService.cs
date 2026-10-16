@@ -428,7 +428,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             Variables = new List<VariableMeta>
             {
                 new() { VarId = "line.running", Name = "设备运行", Kind = VariableKind.Memory, DataType = "bool", InitialValue = true, CycleMs = 100, IsPermanent = true },
-                new() { VarId = "line.speed", Name = "当前速度", Kind = VariableKind.Plc, DataType = "float", InitialValue = 42.5, Min = 0, Max = 100, CycleMs = 200, Source = new VariableSource { Kind = VariableKind.Plc, Channel = "MOCK", Address = "line.speed" } },
+                new() { VarId = "line.speed", Name = "当前速度", Kind = VariableKind.Plc, DataType = "float", InitialValue = 42.5, Min = 0, Max = 100, CycleMs = 200, IsReadOnly = true, Source = new VariableSource { Kind = VariableKind.Plc, Channel = "MOCK", Address = "line.speed" } },
                 new() { VarId = "line.targetSpeed", Name = "目标速度", Kind = VariableKind.Memory, DataType = "float", InitialValue = 55.0, Min = 0, Max = 100, CycleMs = 100, Source = null },
                 new() { VarId = "line.alarm", Name = "报警状态", Kind = VariableKind.Plc, DataType = "bool", InitialValue = false, CycleMs = 250, Source = new VariableSource { Kind = VariableKind.Plc, Channel = "MOCK", Address = "line.alarm" } }
             },
