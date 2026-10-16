@@ -49,6 +49,7 @@ export default function App() {
   const [targetSpeed, setTargetSpeed] = useState("55");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [activeAlarmCount, setActiveAlarmCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -70,6 +71,27 @@ export default function App() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const refreshAlarmCount = useCallback(async () => {
+    try {
+      const response = await fetch(`${API}/api/alarms/active`);
+      if (!response.ok) throw new Error("报警接口不可用");
+      const activeAlarms = await response.json();
+      setActiveAlarmCount(Array.isArray(activeAlarms) ? activeAlarms.length : 0);
+    } catch {
+      // Keep the overview usable if the alarm endpoint is temporarily unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!online) {
+      setActiveAlarmCount(0);
+      return;
+    }
+    void refreshAlarmCount();
+    const interval = window.setInterval(() => { void refreshAlarmCount(); }, 5000);
+    return () => window.clearInterval(interval);
+  }, [online, refreshAlarmCount]);
 
   useEffect(() => {
     if (!online) return;
@@ -141,7 +163,7 @@ export default function App() {
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("variables")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("variables"); }}><SlidersHorizontal size={17} />变量监视</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("screen")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("screen"); }}><Activity size={17} />运行画面</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
-        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("alarms")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("alarms"); }}><AlertTriangle size={17} />报警中心 <span className="nav-count">{alarm ? "1" : "0"}</span></div>
+        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("alarms")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("alarms"); }}><AlertTriangle size={17} />报警中心 <span className="nav-count">{activeAlarmCount}</span></div>
         <div className="nav-item"><Cpu size={17} />驱动诊断</div>
         <div className="sidebar-bottom">
           <div className="security-note"><ShieldCheck size={16} /><span>本机模拟运行环境<br /><small>未连接真实 PLC</small></span></div>
@@ -171,7 +193,7 @@ export default function App() {
           <div className="metric-grid">
             <Metric icon={<Activity size={18} />} label="设备状态" value={running ? "运行中" : "已停止"} detail={running ? "设备处于运行状态" : "设备当前停止"} tone={running ? "green" : "slate"} />
             <Metric icon={<Gauge size={18} />} label="当前速度" value={`${Number.isFinite(speed) ? speed.toFixed(1) : "—"}`} unit="Hz" detail="模拟 PLC 实时采样" tone="blue" />
-            <Metric icon={<AlertTriangle size={18} />} label="活动报警" value={alarm ? "1" : "0"} detail={alarm ? "检测到模拟报警信号" : "当前无活动报警"} tone={alarm ? "amber" : "green"} />
+            <Metric icon={<AlertTriangle size={18} />} label="活动报警" value={String(activeAlarmCount)} detail={activeAlarmCount > 0 ? `${activeAlarmCount} 条活动报警待处理或跟踪` : "当前无活动报警"} tone={activeAlarmCount > 0 ? "amber" : "green"} />
             <Metric icon={<Zap size={18} />} label="变量通讯" value={`${goodCount}/${variables.length}`} detail="质量位为 Good 的变量" tone={goodCount === variables.length && variables.length > 0 ? "green" : "blue"} />
           </div>
 
