@@ -169,6 +169,18 @@ jobs:
               if ($_.Exception.Response.StatusCode.value__ -eq 400) { $invalidNumericInputRejected = $true }
             }
             if (-not $invalidNumericInputRejected) { throw "HMIStudio accepted a boolean variable for a numeric input control" }
+            $readonlyInputScreen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            $readonlyTargetInput = $readonlyInputScreen.controls | Where-Object { $_.id -eq "target-speed-input" } | Select-Object -First 1
+            if (-not $readonlyTargetInput) { throw "HMIStudio demo screen has no numeric input for readonly binding validation" }
+            $readonlyTargetInput.properties.text.source.varId = "line.speed"
+            $readonlyInputBody = $readonlyInputScreen | ConvertTo-Json -Depth 50
+            $readonlyNumericInputRejected = $false
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $readonlyInputBody -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $readonlyNumericInputRejected = $true }
+            }
+            if (-not $readonlyNumericInputRejected) { throw "HMIStudio accepted a readonly variable for a numeric input control" }
             $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             if ($screen.title -eq "CI save validation") { throw "Rejected invalid write binding unexpectedly changed the persisted screen" }
             $screen.title = "CI save validation"
