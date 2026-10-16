@@ -47,6 +47,7 @@ export default function App() {
   const [online, setOnline] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [streamConnected, setStreamConnected] = useState(false);
   const [targetSpeed, setTargetSpeed] = useState("55");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -73,6 +74,35 @@ export default function App() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // The event stream is the primary live path; periodic snapshots recover from proxy,
+  // browser sleep, or transient SSE disconnects without resetting operator input fields.
+  useEffect(() => {
+    if (!online) return;
+    let cancelled = false;
+    const refreshSnapshot = async () => {
+      try {
+        const response = await fetch(`${API}/api/variables`);
+        if (!response.ok) return;
+        const snapshot = await response.json() as Variable[];
+        if (cancelled || !Array.isArray(snapshot)) return;
+        setVariables(previous => {
+          const priorById = new Map(previous.map(item => [item.varId, item]));
+          return snapshot.map(item => {
+            const prior = priorById.get(item.varId);
+            // Keep a newer streamed sample if it arrived after this snapshot request began.
+            return prior && lastUpdate && prior.varId === item.varId
+              ? { ...item, value: prior.value, quality: prior.quality }
+              : item;
+          });
+        });
+      } catch {
+        // The main connection indicator is driven by /api/health; SSE reports its own status.
+      }
+    };
+    const interval = window.setInterval(() => { void refreshSnapshot(); }, 10000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [online, lastUpdate]);
+
   const refreshAlarmCount = useCallback(async () => {
     try {
       const response = await fetch(`${API}/api/alarms/active`);
@@ -94,11 +124,16 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [online, refreshAlarmCount]);
 
+  const variableIds = useMemo(() => variables.map(v => v.varId).join(","), [variables]);
+
   useEffect(() => {
-    if (!online) return;
-    const ids = variables.map(v => v.varId);
-    if (ids.length === 0) return;
-    const stream = new EventSource(`${API}/api/runtime/stream?varIds=${encodeURIComponent(ids.join(","))}`);
+    if (!online || !variableIds) {
+      setStreamConnected(false);
+      return;
+    }
+    const stream = new EventSource(`${API}/api/runtime/stream?varIds=${encodeURIComponent(variableIds)}`);
+    stream.onopen = () => setStreamConnected(true);
+    stream.addEventListener("ready", () => setStreamConnected(true));
     stream.addEventListener("variable", (event) => {
       try {
         const update = JSON.parse((event as MessageEvent).data) as { varId: string; value: unknown; quality: Quality; serverTimestamp: string };
@@ -106,11 +141,12 @@ export default function App() {
           ? { ...v, value: update.value, quality: update.quality }
           : v));
         setLastUpdate(new Date(update.serverTimestamp));
+        setStreamConnected(true);
       } catch { /* Ignore a malformed sample and keep the stream alive. */ }
     });
-    stream.onerror = () => setLastUpdate(previous => previous);
+    stream.onerror = () => setStreamConnected(false);
     return () => stream.close();
-  }, [online, variables.length]);
+  }, [online, variableIds]);
 
   const byId = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])) as Record<string, Variable>, [variables]);
   const goodCount = variables.filter(v => v.quality === "Good").length;
@@ -210,7 +246,7 @@ export default function App() {
                 <div className="pipe pipe-right" />
                 <div className="process-callout"><span>当前速度</span><strong>{Number.isFinite(speed) ? speed.toFixed(1) : "—"} <small>Hz</small></strong><em className={byId["line.speed"]?.quality === "Good" ? "quality-good" : "quality-bad"}>{qualityLabel(byId["line.speed"]?.quality ?? "BadComm")}</em></div>
               </div>
-              <div className="panel-foot"><span><i className="legend-dot green-dot" />运行状态</span><span><i className="legend-dot blue-dot" />模拟数据</span><span className="sample-time">最近采样：{lastUpdate ? lastUpdate.toLocaleTimeString() : "等待数据"}</span></div>
+              <div className="panel-foot"><span><i className="legend-dot green-dot" />运行状态</span><span><i className="legend-dot blue-dot" />模拟数据</span><span className="sample-time">{streamConnected ? "实时流已连接" : "实时流重连中"} · 最近采样：{lastUpdate ? lastUpdate.toLocaleTimeString() : "等待数据"}</span></div>
             </section>
 
             <section className="panel control-panel">
