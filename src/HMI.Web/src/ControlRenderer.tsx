@@ -67,12 +67,12 @@ export function ControlRenderer({ control, variables, selected = false, interact
     .map(source => String(source.varId ?? ""))
     .filter(Boolean))];
   const degradedVariable = boundVariableIds
-    .map(varId => variables[varId])
-    .find(variable => variable?.quality && variable.quality !== "Good");
+    .map(varId => variables[varId] ?? ({ varId, value: undefined, quality: "BadNotExist" } as RuntimeVariable))
+    .find(variable => variable.quality !== "Good");
   const qualityLabel = degradedVariable?.quality === "BadComm" ? "通讯异常"
     : degradedVariable?.quality === "BadNotExist" ? "变量不存在"
       : degradedVariable?.quality === "Uncertain" ? "质量不确定"
-        : degradedVariable?.quality ? "变量质量异常" : "";
+        : degradedVariable ? "质量未知或异常" : "";
   const style: CSSProperties = {
     left: `${control.x / 12.8}%`, top: `${control.y / 7.2}%`,
     width: `${control.width / 12.8}%`, height: `${control.height / 7.2}%`,
