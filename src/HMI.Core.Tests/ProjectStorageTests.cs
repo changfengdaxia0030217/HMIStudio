@@ -104,6 +104,39 @@ public sealed class ProjectStorageTests
     }
 
     [Fact]
+    public async Task ValidateReportsInvalidVariableMetadata()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var path = Path.Combine(directory, "invalid-variables.hmijob");
+            var project = CreateValidProject();
+            project.Variables.Add(new VariableMeta
+            {
+                VarId = "",
+                Name = "",
+                DataType = "mystery",
+                CycleMs = 10,
+                DebounceMs = -1
+            });
+
+            await File.WriteAllTextAsync(path, HmiJson.Serialize(project));
+
+            var errors = await new ProjectStorage().ValidateAsync(path);
+
+            Assert.Contains(errors, e => e.Contains("变量 Id 不能为空"));
+            Assert.Contains(errors, e => e.Contains("名称不能为空"));
+            Assert.Contains(errors, e => e.Contains("数据类型无效"));
+            Assert.Contains(errors, e => e.Contains("防抖时间不能小于 0"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ValidatePropagatesCancellation()
     {
         var directory = CreateTempDirectory();

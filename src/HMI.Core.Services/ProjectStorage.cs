@@ -112,15 +112,30 @@ public sealed class ProjectStorage : IProjectStorage
             if (string.IsNullOrWhiteSpace(p.StartScreenId) || !p.Screens.Any(s => s.Id == p.StartScreenId))
                 errors.Add("启动画面缺失");
 
-            var ids = new HashSet<string>();
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var allowedDataTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "byte", "int", "dint", "float", "double", "real", "bool", "string" };
             foreach (var v in p.Variables)
             {
-                if (!ids.Add(v.VarId))
+                if (string.IsNullOrWhiteSpace(v.VarId))
+                    errors.Add("变量 Id 不能为空");
+                else if (!ids.Add(v.VarId))
                     errors.Add($"变量 Id 重复: {v.VarId}");
+
+                if (string.IsNullOrWhiteSpace(v.Name))
+                    errors.Add($"变量 {v.VarId} 的名称不能为空");
+                if (string.IsNullOrWhiteSpace(v.DataType) || !allowedDataTypes.Contains(v.DataType.Trim()))
+                    errors.Add($"变量 {v.VarId} 的数据类型无效: {v.DataType}");
+                if (v.Min.HasValue && !double.IsFinite(v.Min.Value))
+                    errors.Add($"变量 {v.VarId} 的最小值必须是有限数值");
+                if (v.Max.HasValue && !double.IsFinite(v.Max.Value))
+                    errors.Add($"变量 {v.VarId} 的最大值必须是有限数值");
                 if (v.Min.HasValue && v.Max.HasValue && v.Min.Value > v.Max.Value)
                     errors.Add($"变量 {v.VarId} 的最小值不能大于最大值");
                 if (v.CycleMs <= 0)
                     errors.Add($"变量 {v.VarId} 的刷新周期必须大于 0");
+                if (v.DebounceMs < 0)
+                    errors.Add($"变量 {v.VarId} 的防抖时间不能小于 0");
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
