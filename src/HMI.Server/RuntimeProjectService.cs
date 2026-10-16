@@ -370,8 +370,8 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         if (!double.IsFinite(value)) return false;
         if ((type is "byte" or "int" or "dint") && Math.Truncate(value) != value) return false;
 
-        var min = type switch { "byte" => 0d, "int" => (double)short.MinValue, "dint" => (double)int.MinValue, _ => double.NegativeInfinity };
-        var max = type switch { "byte" => (double)byte.MaxValue, "int" => (double)short.MaxValue, "dint" => (double)int.MaxValue, _ => double.PositiveInfinity };
+        var min = type switch { "byte" => 0d, "int" => (double)short.MinValue, "dint" => (double)int.MinValue, "float" => -(double)float.MaxValue, _ => double.NegativeInfinity };
+        var max = type switch { "byte" => (double)byte.MaxValue, "int" => (double)short.MaxValue, "dint" => (double)int.MaxValue, "float" => (double)float.MaxValue, _ => double.PositiveInfinity };
         return value >= min && value <= max &&
                (!variable.Min.HasValue || value >= variable.Min.Value) &&
                (!variable.Max.HasValue || value <= variable.Max.Value);
