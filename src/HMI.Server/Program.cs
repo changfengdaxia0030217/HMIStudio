@@ -103,6 +103,23 @@ app.MapPost("/api/screens", async (CreateScreenRequest request, RuntimeProjectSe
         return (IResult)Results.Problem(title: "新建画面失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
+app.MapDelete("/api/screens/{screenId}", async (string screenId, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    try
+    {
+        var error = await runtime.DeleteScreenAsync(screenId, ct);
+        if (error is not null)
+        {
+            if (error == "画面不存在") return (IResult)Results.NotFound(new { error, screenId });
+            return (IResult)Results.BadRequest(new { error, screenId });
+        }
+        return (IResult)Results.Ok(new { ok = true, screenId, deleted = true });
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+    {
+        return (IResult)Results.Problem(title: "删除画面失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.MapGet("/api/screens/{screenId}", (string screenId, RuntimeProjectService runtime) =>
 {
     var screen = runtime.Project.Screens.FirstOrDefault(s => string.Equals(s.Id, screenId, StringComparison.Ordinal));

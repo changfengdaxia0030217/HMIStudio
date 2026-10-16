@@ -79,6 +79,11 @@ jobs:
             $restoreStartBody = @{ screenId = $projectSummary.startScreenId } | ConvertTo-Json
             $restoreStartReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/project/start-screen" -Method Put -ContentType "application/json" -Body $restoreStartBody -TimeoutSec 5
             if (-not $restoreStartReceipt.ok) { throw "HMIStudio failed to restore the original start screen during smoke test" }
+            $deleteScreenReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/$newScreenId" -Method Delete -TimeoutSec 5
+            if (-not $deleteScreenReceipt.ok -or -not $deleteScreenReceipt.deleted) { throw "HMIStudio delete-screen API returned failure" }
+            $screensAfterDelete = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
+            $deletedStillListed = @($screensAfterDelete | Where-Object { $_.id -eq $newScreenId })
+            if ($deletedStillListed.Count -gt 0) { throw "HMIStudio deleted screen is still listed" }
             $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
             $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }

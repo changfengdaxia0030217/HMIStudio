@@ -121,6 +121,37 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         _drivers = null;
     }
 
+    public async Task<string?> DeleteScreenAsync(string screenId, CancellationToken cancellationToken = default)
+    {
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            var index = Project.Screens.FindIndex(item => string.Equals(item.Id, screenId, StringComparison.Ordinal));
+            if (index < 0) return "画面不存在";
+            if (Project.Screens.Count <= 1) return "不能删除工程中的最后一个画面";
+            if (string.Equals(Project.StartScreenId, screenId, StringComparison.Ordinal))
+                return "不能删除启动画面，请先将其他画面设为启动画面";
+
+            var removed = Project.Screens[index];
+            Project.Screens.RemoveAt(index);
+            try
+            {
+                await new ProjectStorage().SaveAsync(ProjectPath, Project, cancellationToken);
+                _logger.LogInformation("画面已删除: {ScreenId}", screenId);
+                return null;
+            }
+            catch
+            {
+                Project.Screens.Insert(index, removed);
+                throw;
+            }
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
     public async Task<string?> SetStartScreenAsync(string screenId, CancellationToken cancellationToken = default)
     {
         await _saveGate.WaitAsync(cancellationToken);

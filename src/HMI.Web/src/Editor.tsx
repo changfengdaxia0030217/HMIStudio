@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, Trash2, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
 import "./editor.css";
 import "./runtime-screen.css";
 import { ControlRenderer, resolveControlProperty, type VariableMap } from "./ControlRenderer";
@@ -132,6 +132,29 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       setSaving(false);
     }
   };
+  const deleteScreen = async () => {
+    if (dirty) {
+      setMessage("请先保存当前画面，再删除画面。");
+      return;
+    }
+    if (screenList.length <= 1 || screen.id === startScreenId) {
+      setMessage("不能删除工程中的最后一个画面或启动画面。");
+      return;
+    }
+    if (!window.confirm(`确定删除画面“${screen.title}”吗？此操作会保存到工程文件。`)) return;
+    setSaving(true); setMessage("");
+    try {
+      const response = await fetch(`${API}/api/screens/${encodeURIComponent(screen.id)}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error ?? "删除画面失败");
+      await load(startScreenId);
+      setMessage("画面已删除。");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "删除画面失败");
+    } finally {
+      setSaving(false);
+    }
+  };
   const createScreen = async () => {
     if (dirty) {
       setMessage("请先保存当前画面，再新建画面，避免丢失未保存的修改。");
@@ -241,7 +264,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-library-note"><Grid2X2 size={15} /><span>画布基准尺寸<br /><b>1280 × 720</b></span></div>
       </aside>
       <main className="editor-center">
-        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><button className="editor-new-screen" disabled={loading || saving} onClick={() => void createScreen()}><Plus size={13} />新建画面</button>{screen.id === startScreenId ? <span className="editor-start-screen current">启动画面</span> : <button className="editor-start-screen" disabled={loading || saving} onClick={() => void setStartScreen()} title="将当前画面设置为工程启动画面">设为启动画面</button>}<Eye size={14} />设计预览</div></div>
+        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><button className="editor-new-screen" disabled={loading || saving} onClick={() => void createScreen()}><Plus size={13} />新建画面</button><button className="editor-delete-screen" disabled={loading || saving || dirty || screenList.length <= 1 || screen.id === startScreenId} onClick={() => void deleteScreen()} title="不能删除启动画面、最后一个画面或未保存的画面"><Trash2 size={13} />删除画面</button>{screen.id === startScreenId ? <span className="editor-start-screen current">启动画面</span> : <button className="editor-start-screen" disabled={loading || saving} onClick={() => void setStartScreen()} title="将当前画面设置为工程启动画面">设为启动画面</button>}<Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>
