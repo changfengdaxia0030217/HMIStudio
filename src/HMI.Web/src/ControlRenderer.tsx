@@ -104,6 +104,20 @@ export function ControlRenderer({ control, variables, selected = false, interact
                 setDraft(String(inputVariable?.value ?? text));
                 return;
               }
+              const dataType = String(inputVariable.dataType ?? "").toLowerCase();
+              const integerType = ["byte", "int", "dint"].includes(dataType);
+              if (integerType && !Number.isInteger(value)) {
+                setInputError("该变量只接受整数");
+                setDraft(String(inputVariable.value ?? text));
+                return;
+              }
+              const typeMin = dataType === "byte" ? 0 : dataType === "int" ? -32768 : dataType === "dint" ? -2147483648 : dataType === "float" ? -3.4028234663852886e38 : Number.NEGATIVE_INFINITY;
+              const typeMax = dataType === "byte" ? 255 : dataType === "int" ? 32767 : dataType === "dint" ? 2147483647 : dataType === "float" ? 3.4028234663852886e38 : Number.POSITIVE_INFINITY;
+              if (value < typeMin || value > typeMax) {
+                setInputError(`该变量的数据类型 ${dataType} 不允许此数值`);
+                setDraft(String(inputVariable.value ?? text));
+                return;
+              }
               if (inputVariable.min != null && value < inputVariable.min) {
                 setInputError(`最小允许值为 ${inputVariable.min}`);
                 setDraft(String(inputVariable.value ?? text));
