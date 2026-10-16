@@ -368,7 +368,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
     private static bool IsNumericWriteValueInRange(VariableMeta variable, string type, double value)
     {
         if (!double.IsFinite(value)) return false;
-        if (type is "byte" or "int" or "dint" && Math.Truncate(value) != value) return false;
+        if ((type is "byte" or "int" or "dint") && Math.Truncate(value) != value) return false;
 
         var min = type switch { "byte" => 0d, "int" => (double)short.MinValue, "dint" => (double)int.MinValue, _ => double.NegativeInfinity };
         var max = type switch { "byte" => (double)byte.MaxValue, "int" => (double)short.MaxValue, "dint" => (double)int.MaxValue, _ => double.PositiveInfinity };
