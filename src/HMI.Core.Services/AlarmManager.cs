@@ -110,7 +110,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
             {
                 var dataType = metadata.DataType.Trim().ToLowerInvariant();
                 var isNumericType = dataType is "byte" or "int" or "dint" or "float" or "double" or "real";
-                var isEqualityOperator = rule.Operator.Trim() is "==" or "=" or "!=" or "<>";
+                var isEqualityOperator = rule.Operator is not null && (rule.Operator.Trim() is "==" or "=" or "!=" or "<>");
                 if (isNumericType && !TryNumber(value, out _))
                     errors.Add($"报警规则 {rule.Id} 的比较值必须是数字，因为变量 {rule.VarId} 的类型为 {metadata.DataType}");
                 else if (dataType == "bool" && value is not bool)
