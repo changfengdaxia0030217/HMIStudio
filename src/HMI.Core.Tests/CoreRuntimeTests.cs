@@ -60,6 +60,22 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
+    public async Task FloatVariableRejectsValuesOutsideSinglePrecisionRange()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "floatValue", Name = "Float value", DataType = "float", InitialValue = 12.5f }
+        });
+
+        var tooLarge = await pool.WriteAsync("floatValue", (double)float.MaxValue * 2);
+
+        Assert.False(tooLarge.Ok);
+        Assert.Equal(WriteFailureReason.ValueOutOfRange, tooLarge.Reason);
+        Assert.Equal(12.5f, await pool.ReadAsync("floatValue"));
+    }
+
+    [Fact]
     public async Task MockDriverReadsAndWritesOnlyAfterConnect()
     {
         var driver = new MockPlcDriver("SIM", new Dictionary<string, object?> { ["DB1.DBW0"] = 12 });
