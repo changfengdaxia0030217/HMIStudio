@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, Trash2, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Box, Circle, CircleDot, Eye, Grid2X2, Lamp, MousePointer2, Plus, RectangleHorizontal, Save, ShieldCheck, Trash2, Type, Variable as VariableIcon, ZoomIn, ZoomOut } from "lucide-react";
 import "./editor.css";
 import "./runtime-screen.css";
 import { ControlRenderer, resolveControlProperty, type VariableMap } from "./ControlRenderer";
@@ -179,6 +179,21 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       setSaving(false);
     }
   };
+  const validateProject = async () => {
+    if (dirty) {
+      setMessage("请先保存当前画面，再校验工程。");
+      return;
+    }
+    setSaving(true); setMessage("");
+    try {
+      const response = await fetch(`${API}/api/project/validate`);
+      const result = await response.json() as { ok: boolean; errors: string[]; detail?: string; error?: string };
+      if (!response.ok) throw new Error(result.detail ?? result.error ?? "工程校验请求失败");
+      setMessage(result.ok ? "工程校验通过：未发现结构问题。" : `工程校验发现 ${result.errors.length} 个问题：${result.errors.join("；")}`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "工程校验失败");
+    } finally { setSaving(false); }
+  };
   const save = async () => {
     setSaving(true); setMessage("");
     try {
@@ -254,7 +269,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     <header className="editor-topbar">
       <button className="editor-back" onClick={onBack}><ArrowLeft size={16} />返回运行监控</button>
       <div className="editor-project"><strong>HMIStudio</strong><span>/ 画面组态编辑器</span><i className={dirty ? "dirty-dot" : ""} />{dirty ? "未保存" : "已同步"}</div>
-      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("left")} title="多选控件左对齐">左对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("top")} title="多选控件顶对齐">顶对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-x")} title="多选控件水平中心对齐">水平居中</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-y")} title="多选控件垂直中心对齐">垂直居中</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
+      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("left")} title="多选控件左对齐">左对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("top")} title="多选控件顶对齐">顶对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-x")} title="多选控件水平中心对齐">水平居中</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-y")} title="多选控件垂直中心对齐">垂直居中</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-ghost" disabled={saving || loading || dirty} onClick={() => void validateProject()} title={dirty ? "请先保存修改再校验" : "检查工程 JSON 结构"}><ShieldCheck size={15} />校验工程</button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
     </header>
     <div className="editor-workspace">
       <aside className="editor-library">
