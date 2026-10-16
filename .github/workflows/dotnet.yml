@@ -62,6 +62,9 @@ jobs:
             $drivers = @(Invoke-RestMethod "http://127.0.0.1:5081/api/drivers" -TimeoutSec 5)
             if ($drivers.Count -lt 1) { throw "HMIStudio runtime returned no configured drivers" }
             if ($drivers[0].variableCount -lt 1 -or $drivers[0].variables.Count -lt 1) { throw "HMIStudio driver diagnostics returned no mapped variables" }
+            $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
+            $screenSummaries = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
+            if (-not ($screenSummaries | Where-Object { $_.id -eq $projectSummary.startScreenId })) { throw "HMIStudio project start screen does not exist in the screen list" }
             $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
             $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }
