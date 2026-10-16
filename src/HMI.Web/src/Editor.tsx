@@ -81,6 +81,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const clipboardRef = useRef<Control | null>(null);
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
   const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
+  const booleanVariables = useMemo(() => variables.filter(variable => ["bool", "boolean"].includes(variable.dataType.toLowerCase())), [variables]);
   const load = useCallback(async (preferredScreenId?: string) => {
     setLoading(true);
     try {
@@ -401,16 +402,16 @@ export default function Editor({ onBack }: { onBack: () => void }) {
                 <span>{property.label}</span>
                 <select aria-label={`${property.label}来源`} value={colorIsVariable ? "variable" : "static"} onChange={e => {
                   if (e.target.value === "variable") {
-                    patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
+                    patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: booleanVariables[0]?.varId ?? "" }, direction: "OneWay" } } });
                   } else {
                     patchProperty(property.key, colorIsVariable ? String(property.defaultValue) : value);
                   }
                 }}>
                   <option value="static">固定颜色</option>
-                  <option value="variable" disabled={!variables.length}>绑定变量（布尔变量可驱动指示灯颜色）</option>
+                  <option value="variable" disabled={!booleanVariables.length}>绑定布尔变量（驱动指示灯颜色）</option>
                 </select>
                 {colorIsVariable
-                  ? <label className="editor-field"><span>颜色绑定变量</span><select value={String(colorSource?.type === "$var" ? colorSource.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>
+                  ? <label className="editor-field"><span>颜色绑定变量</span><select value={String(colorSource?.type === "$var" ? colorSource.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{booleanVariables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>
                   : <div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input aria-label={property.label} value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div>}
               </div>;
             }
