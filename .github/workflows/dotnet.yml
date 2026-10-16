@@ -145,6 +145,20 @@ jobs:
             if ($eventTypes -notcontains "Triggered" -or $eventTypes -notcontains "Acknowledged" -or $eventTypes -notcontains "Recovered") { throw "Alarm history is missing trigger, acknowledgement, or recovery events" }
             $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })
             if ($activeAfterRecovery.Count -ne 0) { throw "Recovered alarm remains active: $(ConvertTo-Json -InputObject $activeAfterRecovery -Depth 5 -Compress)" }
+            $invalidScreen = $screen | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+            $invalidRunToggle = $invalidScreen.controls | Where-Object { $_.id -eq "run-toggle" } | Select-Object -First 1
+            if (-not $invalidRunToggle) { throw "HMIStudio demo screen has no run-toggle button for write validation" }
+            $invalidRunToggle.properties.writeVarId.source.value = "line.targetSpeed"
+            $invalidBody = $invalidScreen | ConvertTo-Json -Depth 50
+            $invalidWriteRejected = $false
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $invalidBody -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $invalidWriteRejected = $true }
+            }
+            if (-not $invalidWriteRejected) { throw "HMIStudio accepted a toggle write binding for a numeric variable" }
+            $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($screen.title -eq "CI save validation") { throw "Rejected invalid write binding unexpectedly changed the persisted screen" }
             $screen.title = "CI save validation"
             $body = $screen | ConvertTo-Json -Depth 50
             $saved = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $body -TimeoutSec 5
