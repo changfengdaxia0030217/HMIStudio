@@ -59,7 +59,7 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
             number >= typeMin && number <= typeMax &&
             (target.min == null || number >= target.min) && (target.max == null || number <= target.max);
         } else if (dataType === "string") {
-          compatible = typeof raw === "string";
+          compatible = typeof raw === "string" && raw.toLowerCase() !== "toggle";
         }
         if (!compatible) errors.push(`按钮“${control.name}”的写入值与变量“${writeVarId}”的数据类型或范围不匹配。`);
       }
