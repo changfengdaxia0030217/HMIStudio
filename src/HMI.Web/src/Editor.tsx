@@ -64,6 +64,15 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
         if (!compatible) errors.push(`按钮“${control.name}”的写入值与变量“${writeVarId}”的数据类型或范围不匹配。`);
       }
     }
+    const textSource = control.properties?.text?.source;
+    if (control.controlType === "NumericInput" && textSource?.type === "$var") {
+      const target = variables.find(variable => variable.varId === String(textSource.varId ?? ""));
+      if (target && !["byte", "int", "dint", "float", "double", "real"].includes(target.dataType.toLowerCase())) {
+        errors.push(`数值输入控件“${control.name}”只能绑定数值类型变量“${target.varId}”。`);
+      } else if (target && !target.writable) {
+        errors.push(`数值输入控件“${control.name}”不能绑定只读变量“${target.varId}”。`);
+      }
+    }
   }
   return errors;
 }
@@ -109,6 +118,9 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
   const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
   const booleanVariables = useMemo(() => variables.filter(variable => ["bool", "boolean"].includes(variable.dataType.toLowerCase())), [variables]);
+  const numericInputVariables = useMemo(() => variables.filter(variable =>
+    variable.writable && ["byte", "int", "dint", "float", "double", "real"].includes(variable.dataType.toLowerCase())
+  ), [variables]);
   const load = useCallback(async (preferredScreenId?: string) => {
     setLoading(true);
     try {
@@ -453,7 +465,18 @@ export default function Editor({ onBack }: { onBack: () => void }) {
               if (e.target.value === "variable") patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
               else patchProperty("text", textValue);
             }}><option value="static">静态值</option><option value="variable">绑定变量</option></select></label>
-            {bindingMode === "variable" && <label className="editor-field"><span>绑定变量</span><select disabled={!variables.length} value={String(binding?.type === "$var" ? binding.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}><option value="">{variables.length ? "请选择变量" : "暂无可用变量"}</option>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select>{!variables.length && <small>请先在变量管理中创建变量，再启用动态绑定。</small>}</label>}
+            {bindingMode === "variable" && (() => {
+              const isNumericInput = selected.controlType === "NumericInput";
+              const candidates = isNumericInput ? numericInputVariables : variables;
+              const currentId = String(binding?.type === "$var" ? binding.varId : "");
+              const currentVariable = variables.find(variable => variable.varId === currentId);
+              const currentIsAllowed = !isNumericInput || Boolean(currentVariable && currentVariable.writable && ["byte", "int", "dint", "float", "double", "real"].includes(currentVariable.dataType.toLowerCase()));
+              const options = currentVariable && !currentIsAllowed ? [currentVariable, ...candidates.filter(variable => variable.varId !== currentId)] : candidates;
+              return <label className="editor-field"><span>绑定变量</span><select disabled={!options.length} value={currentId} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, text: { source: { type: "$var", varId: e.target.value }, direction: isNumericInput ? "TwoWay" : "OneWay" } } })}><option value="">{options.length ? "请选择变量" : "暂无符合条件的变量"}</option>{options.map(v => {
+                const allowed = !isNumericInput || (v.writable && ["byte", "int", "dint", "float", "double", "real"].includes(v.dataType.toLowerCase()));
+                return <option key={v.varId} value={v.varId} disabled={!allowed}>{v.name} · {v.varId}{isNumericInput && !allowed ? "（不可用于数值输入，需更换）" : ""}</option>;
+              })}</select>{isNumericInput ? <small>{numericInputVariables.length ? "数值输入仅支持可写的数值变量。" : "当前没有可写的数值变量，请先在变量管理中创建或启用可写数值变量。"}</small> : !variables.length && <small>请先在变量管理中创建变量，再启用动态绑定。</small>}</label>;
+            })()}
           </>}
           <div className="inspector-hint"><VariableIcon size={14} /><span>变量绑定会在运行画面实时求值；按钮可配置变量写入，数值输入可绑定可写变量。</span></div>
           <button className="editor-delete" onClick={removeSelected}>删除此控件</button>
