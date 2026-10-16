@@ -37,7 +37,6 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
       const screenId = String(navigationSource.value ?? "").trim();
       if (screenId && !screenIds.has(screenId)) errors.push(`控件“${control.name}”跳转到不存在的画面“${screenId}”。`);
     }
-    const writeSource = control.properties?.writeVarId?.source;
     if (control.controlType === "Button" && writeSource?.type === "$static") {
       const writeVarId = String(writeSource.value ?? "").trim();
       const target = variables.find(variable => variable.varId === writeVarId);
