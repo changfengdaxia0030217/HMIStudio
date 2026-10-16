@@ -394,8 +394,25 @@ export default function Editor({ onBack }: { onBack: () => void }) {
               return <label className="editor-field" key={property.key}><span>{property.label}</span><input value={text} onChange={e => patchProperty(property.key, e.target.value)} /></label>;
             }
             if (property.kind === "color") {
+              const colorSource = selected.properties?.[property.key]?.source;
+              const colorIsVariable = colorSource?.type === "$var";
               const color = /^#[0-9a-f]{6}$/i.test(value) ? value : String(property.defaultValue);
-              return <label className="editor-field" key={property.key}><span>{property.label}</span><div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div></label>;
+              return <div className="editor-field" key={property.key}>
+                <span>{property.label}</span>
+                <select aria-label={`${property.label}来源`} value={colorIsVariable ? "variable" : "static"} onChange={e => {
+                  if (e.target.value === "variable") {
+                    patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: variables[0]?.varId ?? "" }, direction: "OneWay" } } });
+                  } else {
+                    patchProperty(property.key, colorIsVariable ? String(property.defaultValue) : value);
+                  }
+                }}>
+                  <option value="static">固定颜色</option>
+                  <option value="variable" disabled={!variables.length}>绑定变量（布尔变量可驱动指示灯颜色）</option>
+                </select>
+                {colorIsVariable
+                  ? <label className="editor-field"><span>颜色绑定变量</span><select value={String(colorSource?.type === "$var" ? colorSource.varId : "")} onChange={e => patchControl(selected.id, { properties: { ...selected.properties, [property.key]: { ...(selected.properties[property.key] ?? {}), source: { type: "$var", varId: e.target.value }, direction: "OneWay" } } })}>{variables.map(v => <option key={v.varId} value={v.varId}>{v.name} · {v.varId}</option>)}</select></label>
+                  : <div className="editor-color-row"><input type="color" value={color} onChange={e => patchProperty(property.key, e.target.value)} /><input aria-label={property.label} value={value} onChange={e => patchProperty(property.key, e.target.value)} /></div>}
+              </div>;
             }
             return <label className="editor-field" key={property.key}><span>{property.label}</span><input type="number" min={property.min} max={property.max} step={property.step ?? 1} value={Number(resolveControlProperty(selected, property.key, variablesById, property.defaultValue))} onChange={e => patchProperty(property.key, Math.max(property.min ?? Number.MIN_SAFE_INTEGER, Math.min(property.max ?? Number.MAX_SAFE_INTEGER, Number(e.target.value) || Number(property.defaultValue))))} /></label>;
           })}
