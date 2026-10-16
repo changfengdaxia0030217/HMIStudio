@@ -137,6 +137,39 @@ public sealed class ProjectStorageTests
     }
 
     [Fact]
+    public async Task ValidateReportsBindingsToUnknownVariables()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var path = Path.Combine(directory, "invalid-binding.hmijob");
+            var project = CreateValidProject();
+            project.Screens[0].Controls.Add(new ConfigControlItem
+            {
+                Id = "bound-text",
+                Properties =
+                {
+                    ["text"] = new PropertyBindingInfo
+                    {
+                        Source = new VariablePropertySource { VarId = "missing.variable" }
+                    }
+                }
+            });
+
+            await File.WriteAllTextAsync(path, HmiJson.Serialize(project));
+
+            var errors = await new ProjectStorage().ValidateAsync(path);
+
+            Assert.Contains(errors, e => e.Contains("引用了不存在的变量: missing.variable"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ValidatePropagatesCancellation()
     {
         var directory = CreateTempDirectory();

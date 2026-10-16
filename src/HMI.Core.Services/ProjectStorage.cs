@@ -106,6 +106,9 @@ public sealed class ProjectStorage : IProjectStorage
                         !double.IsFinite(control.Width) || !double.IsFinite(control.Height) ||
                         control.Width <= 0 || control.Height <= 0)
                         errors.Add($"画面 {screen.Id} 的控件 {control.Id} 坐标或尺寸无效");
+
+                    foreach (var binding in control.Properties)
+                        ValidatePropertySource(binding.Value?.Source, screen.Id, control.Id, p.Variables, errors);
                 }
             }
 
@@ -148,5 +151,27 @@ public sealed class ProjectStorage : IProjectStorage
         }
 
         return errors;
+    }
+
+    private static void ValidatePropertySource(
+        IPropertySource? source,
+        string screenId,
+        string controlId,
+        IReadOnlyCollection<VariableMeta> variables,
+        List<string> errors)
+    {
+        switch (source)
+        {
+            case VariablePropertySource variableSource:
+                if (string.IsNullOrWhiteSpace(variableSource.VarId) ||
+                    !variables.Any(variable => string.Equals(variable.VarId, variableSource.VarId, StringComparison.Ordinal)))
+                    errors.Add($"画面 {screenId} 的控件 {controlId} 引用了不存在的变量: {variableSource.VarId}");
+                break;
+            case ConditionalPropertySource conditionalSource:
+                ValidatePropertySource(conditionalSource.Condition, screenId, controlId, variables, errors);
+                ValidatePropertySource(conditionalSource.WhenTrue, screenId, controlId, variables, errors);
+                ValidatePropertySource(conditionalSource.WhenFalse, screenId, controlId, variables, errors);
+                break;
+        }
     }
 }
