@@ -111,6 +111,12 @@ public sealed class ProjectStorage : IProjectStorage
                     foreach (var binding in control.Properties)
                         ValidatePropertySource(binding.Value?.Source, screen.Id, control.Id, p.Variables, errors);
 
+                    if (control.Properties.TryGetValue("writeVarId", out var writeBinding) &&
+                        TryGetStaticString(writeBinding?.Source, out var writeVarId) &&
+                        !string.IsNullOrWhiteSpace(writeVarId) &&
+                        !p.Variables.Any(variable => string.Equals(variable.VarId, writeVarId, StringComparison.Ordinal)))
+                        errors.Add($"画面 {screen.Id} 的按钮 {control.Id} 写入了不存在的变量: {writeVarId}");
+
                     if (control.Properties.TryGetValue("navigateToScreenId", out var navigationBinding) &&
                         TryGetStaticString(navigationBinding?.Source, out var targetScreenId) &&
                         !string.IsNullOrWhiteSpace(targetScreenId) &&
