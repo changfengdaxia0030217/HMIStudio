@@ -61,6 +61,33 @@ jobs:
             if ($variables.Count -lt 1) { throw "HMIStudio runtime returned no variables" }
             $readonlyPlcVariable = Invoke-RestMethod "http://127.0.0.1:5081/api/variables/line.speed" -TimeoutSec 5
             if ($readonlyPlcVariable.writable -ne $false) { throw "HMIStudio demo PLC speed variable must be exposed as readonly" }
+            $mockValueBody = @{ protocol = "MOCK"; address = "line.speed"; value = 56.25 } | ConvertTo-Json
+            $mockValueReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/runtime/mock-values" -Method Post -ContentType "application/json" -Body $mockValueBody -TimeoutSec 5
+            if (-not $mockValueReceipt.ok) { throw "HMIStudio rejected a valid simulated PLC value" }
+            $unknownMockAddressRejected = $false
+            try {
+              $unknownMockBody = @{ protocol = "MOCK"; address = "unmapped.address"; value = 10 } | ConvertTo-Json
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/runtime/mock-values" -Method Post -ContentType "application/json" -Body $unknownMockBody -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $unknownMockAddressRejected = $true }
+            }
+            if (-not $unknownMockAddressRejected) { throw "HMIStudio accepted an unmapped simulated PLC address" }
+            $invalidMockTypeRejected = $false
+            try {
+              $invalidMockTypeBody = @{ protocol = "MOCK"; address = "line.speed"; value = "fast" } | ConvertTo-Json
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/runtime/mock-values" -Method Post -ContentType "application/json" -Body $invalidMockTypeBody -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $invalidMockTypeRejected = $true }
+            }
+            if (-not $invalidMockTypeRejected) { throw "HMIStudio accepted a string for a float PLC variable" }
+            $invalidMockRangeRejected = $false
+            try {
+              $invalidMockRangeBody = @{ protocol = "MOCK"; address = "line.speed"; value = 101 } | ConvertTo-Json
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/runtime/mock-values" -Method Post -ContentType "application/json" -Body $invalidMockRangeBody -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $invalidMockRangeRejected = $true }
+            }
+            if (-not $invalidMockRangeRejected) { throw "HMIStudio accepted an out-of-range simulated PLC value" }
             $drivers = @(Invoke-RestMethod "http://127.0.0.1:5081/api/drivers" -TimeoutSec 5)
             if ($drivers.Count -lt 1) { throw "HMIStudio runtime returned no configured drivers" }
             if ($drivers[0].variableCount -lt 1 -or $drivers[0].variables.Count -lt 1) { throw "HMIStudio driver diagnostics returned no mapped variables" }
