@@ -29,6 +29,18 @@ app.MapGet("/api/health", (RuntimeProjectService runtime) => Results.Ok(new
 }));
 
 app.MapGet("/api/project", (RuntimeProjectService runtime) => Results.Ok(runtime.GetProjectSummary()));
+app.MapGet("/api/project/validate", async (RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    try
+    {
+        var errors = await runtime.ValidateProjectAsync(ct);
+        return Results.Ok(new { ok = errors.Count == 0, errors });
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+    {
+        return Results.Problem(title: "工程校验失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.MapPut("/api/project/start-screen", async (SetStartScreenRequest request, RuntimeProjectService runtime, CancellationToken ct) =>
 {
     try

@@ -63,6 +63,8 @@ jobs:
             if ($drivers.Count -lt 1) { throw "HMIStudio runtime returned no configured drivers" }
             if ($drivers[0].variableCount -lt 1 -or $drivers[0].variables.Count -lt 1) { throw "HMIStudio driver diagnostics returned no mapped variables" }
             $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
+            $projectValidation = Invoke-RestMethod "http://127.0.0.1:5081/api/project/validate" -TimeoutSec 5
+            if (-not $projectValidation.ok -or $projectValidation.errors.Count -gt 0) { throw "HMIStudio project validation failed: $($projectValidation.errors -join '; ')" }
             $screenSummaries = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
             if (-not ($screenSummaries | Where-Object { $_.id -eq $projectSummary.startScreenId })) { throw "HMIStudio project start screen does not exist in the screen list" }
             $newScreenId = "ci-screen-" + [guid]::NewGuid().ToString("N")

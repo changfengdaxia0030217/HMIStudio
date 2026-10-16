@@ -77,6 +77,19 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
     public Task StopAsync(CancellationToken cancellationToken) => DisposeAsync().AsTask();
 
+    public async Task<IReadOnlyList<string>> ValidateProjectAsync(CancellationToken cancellationToken = default)
+    {
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await new ProjectStorage().ValidateAsync(ProjectPath, cancellationToken);
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
     public object GetProjectSummary() => new
     {
         Project.Version,
