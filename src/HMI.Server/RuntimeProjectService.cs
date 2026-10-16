@@ -121,6 +121,33 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         _drivers = null;
     }
 
+    public async Task<string?> SetStartScreenAsync(string screenId, CancellationToken cancellationToken = default)
+    {
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!Project.Screens.Any(item => string.Equals(item.Id, screenId, StringComparison.Ordinal)))
+                return "启动画面不存在";
+            var previous = Project.StartScreenId;
+            Project.StartScreenId = screenId;
+            try
+            {
+                await new ProjectStorage().SaveAsync(ProjectPath, Project, cancellationToken);
+                _logger.LogInformation("工程启动画面已更新: {ScreenId}", screenId);
+                return null;
+            }
+            catch
+            {
+                Project.StartScreenId = previous;
+                throw;
+            }
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
     public async Task<IReadOnlyList<string>> CreateScreenAsync(HmiScreen screen, CancellationToken cancellationToken = default)
     {
         await _saveGate.WaitAsync(cancellationToken);

@@ -2,3 +2,5 @@
 .editor-screen-select{max-width:220px;border:1px solid #2c3b52;border-radius:5px;background:#172338;color:#dbe7f5;padding:5px 8px;font:inherit;font-size:11px;outline-offset:2px}.editor-screen-select:focus{border-color:#43dfb5}.editor-screen-select option{background:#172338;color:#dbe7f5}
 
 .editor-canvas-toolbar .editor-new-screen{display:inline-flex;align-items:center;gap:5px;border:1px solid #2d5c58;border-radius:5px;background:#15332f;color:#8be3ca;padding:5px 8px;font-size:10px;cursor:pointer}.editor-canvas-toolbar .editor-new-screen:hover{background:#1a423b}.editor-canvas-toolbar .editor-new-screen:disabled{opacity:.55;cursor:wait}
+
+.editor-canvas-toolbar .editor-start-screen{display:inline-flex;align-items:center;justify-content:center;border:1px solid #44516a;border-radius:5px;background:#172338;color:#b9c8da;padding:5px 8px;font-size:10px;cursor:pointer;white-space:nowrap}.editor-canvas-toolbar .editor-start-screen.current{border-color:#28594f;background:#15332f;color:#8be3ca;cursor:default}.editor-canvas-toolbar .editor-start-screen:disabled{opacity:.55;cursor:wait}

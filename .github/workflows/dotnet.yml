@@ -71,6 +71,14 @@ jobs:
             if (-not $createdScreen.ok -or $createdScreen.screenId -ne $newScreenId) { throw "HMIStudio create-screen API returned failure" }
             $createdScreenDetails = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/$newScreenId" -TimeoutSec 5
             if ($createdScreenDetails.title -ne "CI screen creation" -or $createdScreenDetails.controls.Count -ne 0) { throw "HMIStudio created screen did not round-trip correctly" }
+            $setStartBody = @{ screenId = $newScreenId } | ConvertTo-Json
+            $setStartReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/project/start-screen" -Method Put -ContentType "application/json" -Body $setStartBody -TimeoutSec 5
+            if (-not $setStartReceipt.ok -or $setStartReceipt.startScreenId -ne $newScreenId) { throw "HMIStudio set-start-screen API returned failure" }
+            $projectAfterStartChange = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
+            if ($projectAfterStartChange.startScreenId -ne $newScreenId) { throw "HMIStudio project did not persist its new start screen" }
+            $restoreStartBody = @{ screenId = $projectSummary.startScreenId } | ConvertTo-Json
+            $restoreStartReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/project/start-screen" -Method Put -ContentType "application/json" -Body $restoreStartBody -TimeoutSec 5
+            if (-not $restoreStartReceipt.ok) { throw "HMIStudio failed to restore the original start screen during smoke test" }
             $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
             $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }

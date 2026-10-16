@@ -37,6 +37,7 @@ function newControl(type: string, index: number): Control {
 export default function Editor({ onBack }: { onBack: () => void }) {
   const [screen, setScreen] = useState<Screen>(fallbackScreen);
   const [screenList, setScreenList] = useState<Array<{ id: string; title: string }>>([]);
+  const [startScreenId, setStartScreenId] = useState("main");
   const [variables, setVariables] = useState<Variable[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -64,6 +65,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       const [project, listedScreens, loadedVariables] = await Promise.all([projectResponse.json(), screensResponse.json(), variablesResponse.json()]);
       const available = Array.isArray(listedScreens) ? listedScreens as Array<{ id: string; title: string }> : [];
       setScreenList(available);
+      setStartScreenId(project.startScreenId ?? "");
       const targetId = preferredScreenId && available.some(item => item.id === preferredScreenId)
         ? preferredScreenId
         : available.some(item => item.id === project.startScreenId)
@@ -106,6 +108,29 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     const removed = new Set(ids);
     commitScreen({ ...screen, controls: screen.controls.filter(c => !removed.has(c.id)) });
     setSelectedId(null); setSelectedIds([]);
+  };
+  const setStartScreen = async () => {
+    if (dirty) {
+      setMessage("请先保存当前画面，再修改工程启动画面。");
+      return;
+    }
+    if (screen.id === startScreenId) return;
+    setSaving(true); setMessage("");
+    try {
+      const response = await fetch(`${API}/api/project/start-screen`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ screenId: screen.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error ?? "设置启动画面失败");
+      setStartScreenId(screen.id);
+      setMessage("已将当前画面设为工程启动画面。");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "设置启动画面失败");
+    } finally {
+      setSaving(false);
+    }
   };
   const createScreen = async () => {
     if (dirty) {
@@ -216,7 +241,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-library-note"><Grid2X2 size={15} /><span>画布基准尺寸<br /><b>1280 × 720</b></span></div>
       </aside>
       <main className="editor-center">
-        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><button className="editor-new-screen" disabled={loading || saving} onClick={() => void createScreen()}><Plus size={13} />新建画面</button><Eye size={14} />设计预览</div></div>
+        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><button className="editor-new-screen" disabled={loading || saving} onClick={() => void createScreen()}><Plus size={13} />新建画面</button>{screen.id === startScreenId ? <span className="editor-start-screen current">启动画面</span> : <button className="editor-start-screen" disabled={loading || saving} onClick={() => void setStartScreen()} title="将当前画面设置为工程启动画面">设为启动画面</button>}<Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>

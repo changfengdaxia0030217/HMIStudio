@@ -29,6 +29,19 @@ app.MapGet("/api/health", (RuntimeProjectService runtime) => Results.Ok(new
 }));
 
 app.MapGet("/api/project", (RuntimeProjectService runtime) => Results.Ok(runtime.GetProjectSummary()));
+app.MapPut("/api/project/start-screen", async (SetStartScreenRequest request, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    try
+    {
+        var error = await runtime.SetStartScreenAsync(request.ScreenId, ct);
+        if (error is not null) return (IResult)Results.BadRequest(new { error });
+        return (IResult)Results.Ok(new { ok = true, startScreenId = request.ScreenId });
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+    {
+        return (IResult)Results.Problem(title: "设置启动画面失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.MapGet("/api/drivers", (RuntimeProjectService runtime) =>
 {
     var drivers = runtime.Project.Variables
@@ -229,3 +242,4 @@ static object? NormalizeJsonValue(JsonElement value) => value.ValueKind switch
 public sealed record WriteVariableRequest(JsonElement Value, string? RequestId = null);
 public sealed record MockValueRequest(string Protocol, string Address, JsonElement Value);
 public sealed record CreateScreenRequest(string Id, string Title, string? Background = null, int Width = 1280, int Height = 720);
+public sealed record SetStartScreenRequest(string ScreenId);
