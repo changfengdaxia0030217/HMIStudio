@@ -106,6 +106,22 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                 errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或数字");
             else if (TryNumber(value, out var number) && !double.IsFinite(number))
                 errors.Add($"报警规则 {rule.Id} 的数字比较值必须是有限数值");
+            else if (!string.IsNullOrWhiteSpace(rule.VarId) && pool.Metas.TryGetValue(rule.VarId, out var metadata))
+            {
+                var dataType = metadata.DataType.Trim().ToLowerInvariant();
+                var isNumericType = dataType is "byte" or "int" or "dint" or "float" or "double" or "real";
+                var isEqualityOperator = rule.Operator.Trim() is "==" or "=" or "!=" or "<>";
+                if (isNumericType && !TryNumber(value, out _))
+                    errors.Add($"报警规则 {rule.Id} 的比较值必须是数字，因为变量 {rule.VarId} 的类型为 {metadata.DataType}");
+                else if (dataType == "bool" && value is not bool)
+                    errors.Add($"报警规则 {rule.Id} 的比较值必须是布尔值，因为变量 {rule.VarId} 的类型为 bool");
+                else if (dataType == "bool" && !isEqualityOperator)
+                    errors.Add($"报警规则 {rule.Id} 的 bool 变量只支持相等或不相等比较");
+                else if (dataType == "string" && value is not string)
+                    errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串，因为变量 {rule.VarId} 的类型为 string");
+                else if (!isNumericType && dataType is not ("bool" or "string"))
+                    errors.Add($"报警规则 {rule.Id} 使用了不支持的变量数据类型: {metadata.DataType}");
+            }
         }
 
         if (errors.Count > 0)
