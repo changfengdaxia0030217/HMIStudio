@@ -75,6 +75,35 @@ public sealed class ProjectStorageTests
     }
 
     [Fact]
+    public async Task ValidateReportsInvalidScreensAndControls()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var path = Path.Combine(directory, "invalid-layout.hmijob");
+            var project = CreateValidProject();
+            project.Screens[0].Width = 0;
+            project.Screens[0].Controls.Add(new ConfigControlItem { Id = "duplicate", Width = 10, Height = 10 });
+            project.Screens[0].Controls.Add(new ConfigControlItem { Id = "duplicate", Width = 0, Height = 10 });
+            project.Screens.Add(new HmiScreen { Id = "main", Title = "Duplicate screen" });
+
+            await File.WriteAllTextAsync(path, HmiJson.Serialize(project));
+
+            var errors = await new ProjectStorage().ValidateAsync(path);
+
+            Assert.Contains(errors, e => e.Contains("画面 Id 重复"));
+            Assert.Contains(errors, e => e.Contains("宽高必须在 1 到 8192 之间"));
+            Assert.Contains(errors, e => e.Contains("控件 Id 重复"));
+            Assert.Contains(errors, e => e.Contains("控件 duplicate 坐标或尺寸无效"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ValidatePropagatesCancellation()
     {
         var directory = CreateTempDirectory();

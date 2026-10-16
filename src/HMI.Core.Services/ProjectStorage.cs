@@ -78,6 +78,37 @@ public sealed class ProjectStorage : IProjectStorage
             if (p.FormatVersion < 1)
                 errors.Add($"工程格式版本无效: {p.FormatVersion}");
 
+            if (p.BaseWidth <= 0 || p.BaseHeight <= 0 || p.BaseWidth > 8192 || p.BaseHeight > 8192)
+                errors.Add("工程基准宽高必须在 1 到 8192 之间");
+
+            var screenIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var screen in p.Screens)
+            {
+                if (string.IsNullOrWhiteSpace(screen.Id))
+                    errors.Add("画面 ID 不能为空");
+                else if (!screenIds.Add(screen.Id))
+                    errors.Add($"画面 Id 重复: {screen.Id}");
+
+                if (string.IsNullOrWhiteSpace(screen.Title))
+                    errors.Add($"画面 {screen.Id} 名称不能为空");
+                if (screen.Width <= 0 || screen.Height <= 0 || screen.Width > 8192 || screen.Height > 8192)
+                    errors.Add($"画面 {screen.Id} 的宽高必须在 1 到 8192 之间");
+
+                var controlIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var control in screen.Controls)
+                {
+                    if (string.IsNullOrWhiteSpace(control.Id))
+                        errors.Add($"画面 {screen.Id} 存在控件 ID 为空");
+                    else if (!controlIds.Add(control.Id))
+                        errors.Add($"画面 {screen.Id} 的控件 Id 重复: {control.Id}");
+
+                    if (!double.IsFinite(control.X) || !double.IsFinite(control.Y) ||
+                        !double.IsFinite(control.Width) || !double.IsFinite(control.Height) ||
+                        control.Width <= 0 || control.Height <= 0)
+                        errors.Add($"画面 {screen.Id} 的控件 {control.Id} 坐标或尺寸无效");
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(p.StartScreenId) || !p.Screens.Any(s => s.Id == p.StartScreenId))
                 errors.Add("启动画面缺失");
 
