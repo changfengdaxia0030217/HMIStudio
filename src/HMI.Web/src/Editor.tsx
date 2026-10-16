@@ -107,6 +107,30 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     commitScreen({ ...screen, controls: screen.controls.filter(c => !removed.has(c.id)) });
     setSelectedId(null); setSelectedIds([]);
   };
+  const createScreen = async () => {
+    if (dirty) {
+      setMessage("请先保存当前画面，再新建画面，避免丢失未保存的修改。");
+      return;
+    }
+    setSaving(true); setMessage("");
+    const id = `screen-${Date.now().toString(36)}`;
+    const title = `新建画面 ${screenList.length + 1}`;
+    try {
+      const response = await fetch(`${API}/api/screens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, background: "#111827", width: 1280, height: 720 }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error ?? "新建画面失败");
+      await load(id);
+      if (liveScreenRef.current.id === id) setMessage("新画面已创建并载入。");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "新建画面失败");
+    } finally {
+      setSaving(false);
+    }
+  };
   const save = async () => {
     setSaving(true); setMessage("");
     try {
@@ -192,7 +216,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-library-note"><Grid2X2 size={15} /><span>画布基准尺寸<br /><b>1280 × 720</b></span></div>
       </aside>
       <main className="editor-center">
-        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><Eye size={14} />设计预览</div></div>
+        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><button className="editor-new-screen" disabled={loading || saving} onClick={() => void createScreen()}><Plus size={13} />新建画面</button><Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>

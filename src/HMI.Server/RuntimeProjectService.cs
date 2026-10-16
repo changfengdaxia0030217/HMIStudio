@@ -121,6 +121,45 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         _drivers = null;
     }
 
+    public async Task<IReadOnlyList<string>> CreateScreenAsync(HmiScreen screen, CancellationToken cancellationToken = default)
+    {
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            var errors = new List<string>();
+            if (string.IsNullOrWhiteSpace(screen.Id))
+                errors.Add("画面 ID 不能为空");
+            else if (screen.Id.Length > 128 || screen.Id.Any(char.IsControl) || screen.Id.Contains('/'))
+                errors.Add("画面 ID 长度或字符无效");
+            else if (Project.Screens.Any(item => string.Equals(item.Id, screen.Id, StringComparison.Ordinal)))
+                errors.Add($"画面 ID 已存在: {screen.Id}");
+            if (string.IsNullOrWhiteSpace(screen.Title))
+                errors.Add("画面名称不能为空");
+            if (screen.Width <= 0 || screen.Height <= 0 || screen.Width > 8192 || screen.Height > 8192)
+                errors.Add("画面宽高必须在 1 到 8192 之间");
+            if (errors.Count > 0) return errors;
+
+            screen.Background = string.IsNullOrWhiteSpace(screen.Background) ? "#111827" : screen.Background;
+            screen.Controls ??= new List<ConfigControlItem>();
+            Project.Screens.Add(screen);
+            try
+            {
+                await new ProjectStorage().SaveAsync(ProjectPath, Project, cancellationToken);
+                _logger.LogInformation("新画面已创建: {ScreenId}; title={ScreenTitle}", screen.Id, screen.Title);
+                return Array.Empty<string>();
+            }
+            catch
+            {
+                Project.Screens.Remove(screen);
+                throw;
+            }
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
     public async Task<IReadOnlyList<string>> SaveScreenAsync(string screenId, HmiScreen screen, CancellationToken cancellationToken = default)
     {
         await _saveGate.WaitAsync(cancellationToken);

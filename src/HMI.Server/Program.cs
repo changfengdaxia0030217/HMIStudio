@@ -67,6 +67,29 @@ app.MapGet("/api/screens", (RuntimeProjectService runtime) => Results.Ok(runtime
     screen.Id, screen.Title, screen.Background, screen.ScreenType, screen.Width, screen.Height,
     ControlCount = screen.Controls.Count
 })));
+app.MapPost("/api/screens", async (CreateScreenRequest request, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    var screen = new HmiScreen
+    {
+        Id = request.Id,
+        Title = request.Title,
+        Background = request.Background ?? "#111827",
+        ScreenType = ScreenType.Normal,
+        Width = request.Width,
+        Height = request.Height,
+        Controls = new List<ConfigControlItem>()
+    };
+    try
+    {
+        var errors = await runtime.CreateScreenAsync(screen, ct);
+        if (errors.Count > 0) return (IResult)Results.BadRequest(new { error = string.Join("；", errors), errors });
+        return (IResult)Results.Created($"/api/screens/{Uri.EscapeDataString(screen.Id)}", new { ok = true, screenId = screen.Id });
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+    {
+        return (IResult)Results.Problem(title: "新建画面失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.MapGet("/api/screens/{screenId}", (string screenId, RuntimeProjectService runtime) =>
 {
     var screen = runtime.Project.Screens.FirstOrDefault(s => string.Equals(s.Id, screenId, StringComparison.Ordinal));
@@ -205,3 +228,4 @@ static object? NormalizeJsonValue(JsonElement value) => value.ValueKind switch
 
 public sealed record WriteVariableRequest(JsonElement Value, string? RequestId = null);
 public sealed record MockValueRequest(string Protocol, string Address, JsonElement Value);
+public sealed record CreateScreenRequest(string Id, string Title, string? Background = null, int Width = 1280, int Height = 720);

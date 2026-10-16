@@ -65,6 +65,12 @@ jobs:
             $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
             $screenSummaries = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
             if (-not ($screenSummaries | Where-Object { $_.id -eq $projectSummary.startScreenId })) { throw "HMIStudio project start screen does not exist in the screen list" }
+            $newScreenId = "ci-screen-" + [guid]::NewGuid().ToString("N")
+            $createScreenBody = @{ id = $newScreenId; title = "CI screen creation"; background = "#111827"; width = 1280; height = 720 } | ConvertTo-Json
+            $createdScreen = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens" -Method Post -ContentType "application/json" -Body $createScreenBody -TimeoutSec 5
+            if (-not $createdScreen.ok -or $createdScreen.screenId -ne $newScreenId) { throw "HMIStudio create-screen API returned failure" }
+            $createdScreenDetails = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/$newScreenId" -TimeoutSec 5
+            if ($createdScreenDetails.title -ne "CI screen creation" -or $createdScreenDetails.controls.Count -ne 0) { throw "HMIStudio created screen did not round-trip correctly" }
             $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
             $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }
