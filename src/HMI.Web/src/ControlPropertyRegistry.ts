@@ -40,6 +40,7 @@ export const CONTROL_REGISTRY: ControlDefinition[] = [
     { ...background, defaultValue: "#2563EB" },
     { key: "writeVarId", label: "写入变量", kind: "text", defaultValue: "line.running" },
     { key: "writeValue", label: "写入值（toggle 可切换布尔值）", kind: "text", defaultValue: "toggle" },
+    { key: "navigateToScreenId", label: "点击跳转画面 ID（留空则写变量）", kind: "text", defaultValue: "" },
   ] },
   { type: "Lamp", label: "指示灯", width: 72, height: 72, properties: [
     { ...commonColor, defaultValue: "#38D9A9" },

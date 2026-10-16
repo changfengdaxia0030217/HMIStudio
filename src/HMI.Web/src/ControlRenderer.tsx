@@ -30,9 +30,10 @@ function parseWriteValue(raw: unknown, current: unknown): unknown {
   if (typeof current === "number" && String(raw).trim() !== "" && Number.isFinite(Number(raw))) return Number(raw);
   return raw;
 }
-export function ControlRenderer({ control, variables, selected = false, interactive = false, runtime = false, onWrite, onPointerDown, className = "" }: {
+export function ControlRenderer({ control, variables, selected = false, interactive = false, runtime = false, onWrite, onNavigate, onPointerDown, className = "" }: {
   control: ScreenControl; variables: VariableMap; selected?: boolean; interactive?: boolean; runtime?: boolean;
   onWrite?: (varId: string, value: unknown) => void;
+  onNavigate?: (screenId: string) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void; className?: string;
 }) {
   const text = printable(resolveControlProperty(control, "text", variables, control.name || control.controlType));
@@ -54,6 +55,7 @@ export function ControlRenderer({ control, variables, selected = false, interact
   }, [inputVariable?.value, text]);
   const targetVarId = String(resolveControlProperty(control, "writeVarId", variables, "") ?? "");
   const writeValue = resolveControlProperty(control, "writeValue", variables, "toggle");
+  const navigateToScreenId = String(resolveControlProperty(control, "navigateToScreenId", variables, "") ?? "").trim();
   const style: CSSProperties = {
     left: `${control.x / 12.8}%`, top: `${control.y / 7.2}%`,
     width: `${control.width / 12.8}%`, height: `${control.height / 7.2}%`,
@@ -62,6 +64,10 @@ export function ControlRenderer({ control, variables, selected = false, interact
   return <div className={`hmi-control control-${control.controlType.toLowerCase()} ${selected ? "selected" : ""} ${className}`} style={style} onPointerDown={onPointerDown} data-control-id={control.id}>
     {runtime && control.controlType === "Button"
       ? <button type="button" className="hmi-runtime-button" onPointerDown={event => event.stopPropagation()} onClick={() => {
+          if (navigateToScreenId) {
+            onNavigate?.(navigateToScreenId);
+            return;
+          }
           if (!targetVarId || !onWrite) return;
           const current = variables[targetVarId]?.value;
           onWrite(targetVarId, parseWriteValue(writeValue, current));

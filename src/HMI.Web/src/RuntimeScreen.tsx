@@ -88,7 +88,13 @@ export default function RuntimeScreen({ onBack, variables }: { onBack: () => voi
     {error && <div className="runtime-screen-error">{error}</div>}
     {notice && <div className="runtime-screen-notice" role="status">{notice}<button onClick={() => setNotice("")}>关闭</button></div>}
     <main className="runtime-screen-content"><div className="runtime-screen-stage" style={{ background: screen?.background ?? "#111827", width: `min(100%, ${stageWidth}px)`, aspectRatio: `${stageWidth} / ${stageHeight}` }}>
-      {screen?.controls.map(control => <ControlRenderer key={control.id} control={control} variables={byId} runtime onWrite={(varId, value) => { void writeVariable(varId, value); }} />)}
+      {screen?.controls.map(control => <ControlRenderer key={control.id} control={control} variables={byId} runtime onWrite={(varId, value) => { void writeVariable(varId, value); }} onNavigate={screenId => {
+        if (!screenList.some(item => item.id === screenId)) {
+          setNotice(`跳转失败：工程中不存在画面 ${screenId}`);
+          return;
+        }
+        void loadScreen(screenId);
+      }} />)}
       {!screen && !error && <div className="runtime-screen-loading">正在加载工程画面…</div>}
     </div></main>
     <footer className="runtime-screen-footer"><span>{screen?.controls.length ?? 0} 个控件</span><span>{busy ? "正在写入变量…" : "按钮可写入变量 · 数值输入在离开输入框时提交"}</span></footer>

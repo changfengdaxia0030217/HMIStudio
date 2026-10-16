@@ -110,6 +110,13 @@ public sealed class ProjectStorage : IProjectStorage
 
                     foreach (var binding in control.Properties)
                         ValidatePropertySource(binding.Value?.Source, screen.Id, control.Id, p.Variables, errors);
+
+                    if (control.Properties.TryGetValue("navigateToScreenId", out var navigationBinding) &&
+                        navigationBinding?.Source is StaticPropertySource navigationSource &&
+                        navigationSource.Value is string targetScreenId &&
+                        !string.IsNullOrWhiteSpace(targetScreenId) &&
+                        !p.Screens.Any(target => string.Equals(target.Id, targetScreenId, StringComparison.Ordinal)))
+                        errors.Add($"画面 {screen.Id} 的控件 {control.Id} 跳转目标不存在: {targetScreenId}");
                 }
             }
 

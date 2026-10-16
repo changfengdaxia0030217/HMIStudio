@@ -171,6 +171,40 @@ public sealed class ProjectStorageTests
     }
 
     [Fact]
+    public async Task ValidateReportsButtonNavigationToMissingScreen()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var path = Path.Combine(directory, "invalid-navigation.hmijob");
+            var project = CreateValidProject();
+            project.Screens[0].Controls.Add(new ConfigControlItem
+            {
+                Id = "navigate-button",
+                ControlType = "Button",
+                Properties =
+                {
+                    ["navigateToScreenId"] = new PropertyBindingInfo
+                    {
+                        Source = new StaticPropertySource { Value = "missing-screen" }
+                    }
+                }
+            });
+
+            await File.WriteAllTextAsync(path, HmiJson.Serialize(project));
+
+            var errors = await new ProjectStorage().ValidateAsync(path);
+
+            Assert.Contains(errors, e => e.Contains("跳转目标不存在: missing-screen"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ValidateReportsInvalidEnabledAlarmRules()
     {
         var directory = CreateTempDirectory();
