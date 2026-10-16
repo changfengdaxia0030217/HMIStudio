@@ -388,7 +388,10 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           {getControlDefinition(selected.controlType).properties.map(property => {
             const value = String(staticValue(selected, property.key, property.defaultValue));
             if (property.key === "writeVarId") {
-              return <label className="editor-field" key={property.key}><span>{property.label}</span><select value={value} onChange={e => patchProperty(property.key, e.target.value)}><option value="">不写入变量</option>{variables.map(variable => <option key={variable.varId} value={variable.varId}>{variable.name} · {variable.varId}</option>)}</select></label>;
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><select value={value} onChange={e => patchProperty(property.key, e.target.value)}><option value="">不写入变量</option>{variables.map(variable => <option key={variable.varId} value={variable.varId}>{variable.name} · {variable.varId}</option>)}</select>{!variables.length && <small>当前没有可写入的变量，请先在变量管理中创建变量。</small>}</label>;
+            }
+            if (property.key === "navigateToScreenId") {
+              return <label className="editor-field" key={property.key}><span>{property.label}</span><select value={value} onChange={e => patchProperty(property.key, e.target.value)}><option value="">不跳转（执行变量写入）</option>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id} · {item.id}</option>)}</select>{!screenList.length && <small>当前工程没有可跳转的画面。</small>}</label>;
             }
             if (property.kind === "text") {
               const text = property.key === "text" ? textValue : value;
