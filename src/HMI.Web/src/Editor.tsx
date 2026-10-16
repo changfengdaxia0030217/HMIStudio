@@ -66,10 +66,13 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
     }
     const textSource = control.properties?.text?.source;
     if (control.controlType === "NumericInput" && textSource?.type === "$var") {
-      const target = variables.find(variable => variable.varId === String(textSource.varId ?? ""));
-      if (target && !["byte", "int", "dint", "float", "double", "real"].includes(target.dataType.toLowerCase())) {
+      const targetId = String(textSource.varId ?? "");
+      const target = variables.find(variable => variable.varId === targetId);
+      if (!target) {
+        errors.push(`数值输入控件“${control.name}”绑定的变量“${targetId}”不存在。`);
+      } else if (!["byte", "int", "dint", "float", "double", "real"].includes(target.dataType.toLowerCase())) {
         errors.push(`数值输入控件“${control.name}”只能绑定数值类型变量“${target.varId}”。`);
-      } else if (target && !target.writable) {
+      } else if (!target.writable) {
         errors.push(`数值输入控件“${control.name}”不能绑定只读变量“${target.varId}”。`);
       }
     }
