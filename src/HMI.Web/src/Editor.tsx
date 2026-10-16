@@ -36,6 +36,7 @@ function newControl(type: string, index: number): Control {
 }
 export default function Editor({ onBack }: { onBack: () => void }) {
   const [screen, setScreen] = useState<Screen>(fallbackScreen);
+  const [screenList, setScreenList] = useState<Array<{ id: string; title: string }>>([]);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -53,12 +54,25 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const clipboardRef = useRef<Control | null>(null);
   const selected = screen.controls.find(c => c.id === selectedId) ?? null;
   const variablesById: VariableMap = useMemo(() => Object.fromEntries(variables.map(v => [v.varId, v])), [variables]);
-  const load = useCallback(async () => {
+  const load = useCallback(async (preferredScreenId?: string) => {
     setLoading(true);
     try {
-      const [s, v] = await Promise.all([fetch(`${API}/api/screens/main`), fetch(`${API}/api/variables`)]);
-      if (!s.ok || !v.ok) throw new Error("本机运行时不可用，请先启动 HMIStudio.Server。");
-      const [loadedScreen, loadedVariables] = await Promise.all([s.json(), v.json()]);
+      const [projectResponse, screensResponse, variablesResponse] = await Promise.all([
+        fetch(`${API}/api/project`), fetch(`${API}/api/screens`), fetch(`${API}/api/variables`),
+      ]);
+      if (!projectResponse.ok || !screensResponse.ok || !variablesResponse.ok) throw new Error("本机运行时不可用，请先启动 HMIStudio.Server。");
+      const [project, listedScreens, loadedVariables] = await Promise.all([projectResponse.json(), screensResponse.json(), variablesResponse.json()]);
+      const available = Array.isArray(listedScreens) ? listedScreens as Array<{ id: string; title: string }> : [];
+      setScreenList(available);
+      const targetId = preferredScreenId && available.some(item => item.id === preferredScreenId)
+        ? preferredScreenId
+        : available.some(item => item.id === project.startScreenId)
+          ? project.startScreenId
+          : available[0]?.id;
+      if (!targetId) throw new Error("工程中没有可编辑的画面。");
+      const screenResponse = await fetch(`${API}/api/screens/${encodeURIComponent(targetId)}`);
+      if (!screenResponse.ok) throw new Error("无法读取所选画面。");
+      const loadedScreen = await screenResponse.json();
       const loaded = { ...loadedScreen, controls: loadedScreen.controls ?? [] } as Screen;
       liveScreenRef.current = loaded; setScreen(loaded); historyRef.current = { past: [], future: [] }; setHistoryVersion(v => v + 1);
       setVariables(loadedVariables);
@@ -178,7 +192,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
         <div className="editor-library-note"><Grid2X2 size={15} /><span>画布基准尺寸<br /><b>1280 × 720</b></span></div>
       </aside>
       <main className="editor-center">
-        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screen.title || "未命名画面"}<small>/{screen.id}</small></div><div><Eye size={14} />设计预览</div></div>
+        <div className="editor-canvas-toolbar"><div><span className="editor-screen-dot" />{screenList.length > 1 ? <select className="editor-screen-select" aria-label="选择要编辑的画面" value={screen.id} onChange={e => { if (dirty) { setMessage("请先保存当前画面，再切换画面，避免丢失未保存的修改。"); return; } void load(e.target.value); }}>{screenList.map(item => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}</select> : (screen.title || "未命名画面")}<small>/{screen.id}</small></div><div><Eye size={14} />设计预览</div></div>
         <div className="editor-canvas-scroll">
           <div className="editor-stage-wrap" style={{ width: `${zoom * 100}%` }}>
             <div ref={stageRef} className="editor-stage" style={stageStyle} onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); setSelectedIds([]); } }}>
