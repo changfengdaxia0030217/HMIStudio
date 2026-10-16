@@ -18,7 +18,7 @@ public sealed class AlarmManagerConcurrencyTests
                 pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
 
             var writes = Enumerable.Range(0, 32)
-                .Select(index => pool.WriteAsync("temperature", 95.0 + index).AsTask());
+                .Select(index => pool.WriteAsync("temperature", 95.0 + index));
             var results = await Task.WhenAll(writes);
             Assert.All(results, result => Assert.True(result.Ok));
 
