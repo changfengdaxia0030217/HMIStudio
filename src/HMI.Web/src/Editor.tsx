@@ -10,7 +10,7 @@ type Source = { type: "$static"; value?: unknown } | { type: "$var"; varId: stri
 type Binding = { source?: Source | null; direction?: "OneWay" | "TwoWay"; dependencies?: string[]; mapping?: unknown[] };
 type Control = { id: string; name: string; controlType: string; x: number; y: number; width: number; height: number; properties: Record<string, Binding>; eventActions?: Record<string, unknown[]> };
 type Screen = { id: string; title: string; background: string; screenType: string; width: number; height: number; controls: Control[] };
-type Variable = { varId: string; name: string; dataType: string; value: unknown; writable: boolean };
+type Variable = { varId: string; name: string; dataType: string; value: unknown; writable: boolean; min?: number | null; max?: number | null };
 const ICONS = { Text: Type, Button: MousePointer2, Lamp, NumericDisplay: VariableIcon, NumericInput: CircleDot, Rectangle: RectangleHorizontal } as const;
 const LIBRARY = CONTROL_REGISTRY.map(item => ({ ...item, icon: ICONS[item.type as keyof typeof ICONS] }));
 const fallbackScreen: Screen = { id: "main", title: "设备总览", background: "#111827", screenType: "Normal", width: 1280, height: 720, controls: [] };
@@ -36,6 +36,34 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
     if (navigationSource?.type === "$static") {
       const screenId = String(navigationSource.value ?? "").trim();
       if (screenId && !screenIds.has(screenId)) errors.push(`控件“${control.name}”跳转到不存在的画面“${screenId}”。`);
+    }
+    const writeSource = control.properties?.writeVarId?.source;
+    if (control.controlType === "Button" && writeSource?.type === "$static") {
+      const writeVarId = String(writeSource.value ?? "").trim();
+      const target = variables.find(variable => variable.varId === writeVarId);
+      if (target && !target.writable) {
+        errors.push(`按钮“${control.name}”不能写入只读变量“${writeVarId}”。`);
+      }
+      const valueSource = control.properties?.writeValue?.source;
+      if (target && valueSource?.type === "$static") {
+        const raw = valueSource.value ?? "toggle";
+        const dataType = target.dataType.toLowerCase();
+        let compatible = false;
+        if (dataType === "bool") {
+          compatible = typeof raw === "boolean" || (typeof raw === "string" && ["toggle", "true", "false"].includes(raw.toLowerCase()));
+        } else if (["byte", "int", "dint", "float", "double", "real"].includes(dataType)) {
+          const number = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : Number.NaN;
+          const integerType = ["byte", "int", "dint"].includes(dataType);
+          const typeMin = dataType === "byte" ? 0 : dataType === "int" ? -32768 : dataType === "dint" ? -2147483648 : Number.NEGATIVE_INFINITY;
+          const typeMax = dataType === "byte" ? 255 : dataType === "int" ? 32767 : dataType === "dint" ? 2147483647 : Number.POSITIVE_INFINITY;
+          compatible = Number.isFinite(number) && (!integerType || Number.isInteger(number)) &&
+            number >= typeMin && number <= typeMax &&
+            (target.min == null || number >= target.min) && (target.max == null || number <= target.max);
+        } else if (dataType === "string") {
+          compatible = typeof raw === "string";
+        }
+        if (!compatible) errors.push(`按钮“${control.name}”的写入值与变量“${writeVarId}”的数据类型或范围不匹配。`);
+      }
     }
   }
   return errors;
