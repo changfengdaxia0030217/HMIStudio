@@ -152,6 +152,44 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task NumericVariableRejectsNonNumericThreshold()
+    {
+        var rule = CreateRules()[0];
+        rule.Value = "hot";
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task BooleanVariableRejectsRelationalOperator()
+    {
+        var rule = CreateRules()[0];
+        rule.VarId = "running";
+        rule.Operator = ">";
+        rule.Value = true;
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task BooleanVariableRejectsNonBooleanThreshold()
+    {
+        var rule = CreateRules()[0];
+        rule.VarId = "running";
+        rule.Operator = "==";
+        rule.Value = 1;
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
+    public async Task StringVariableRejectsNumericThreshold()
+    {
+        var rule = CreateRules()[0];
+        rule.VarId = "machine-state";
+        rule.Operator = "==";
+        rule.Value = 1;
+        await AssertRulesRejectedAsync(rule);
+    }
+
+    [Fact]
     public async Task DisabledInvalidRuleIsIgnored()
     {
         var directory = CreateTempDirectory();
@@ -221,6 +259,24 @@ public sealed class AlarmManagerTests
                 InitialValue = 70.0,
                 Min = 0,
                 Max = 150,
+                CycleMs = 50
+            },
+            new VariableMeta
+            {
+                VarId = "running",
+                Name = "Running",
+                DataType = "bool",
+                Kind = VariableKind.Memory,
+                InitialValue = false,
+                CycleMs = 50
+            },
+            new VariableMeta
+            {
+                VarId = "machine-state",
+                Name = "Machine state",
+                DataType = "string",
+                Kind = VariableKind.Memory,
+                InitialValue = "Idle",
                 CycleMs = 50
             }
         });
