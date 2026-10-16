@@ -36,8 +36,8 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [activeResponse, historyResponse] = await Promise.all([
         fetch(`${API}/api/alarms/active`),
@@ -51,11 +51,15 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     } catch {
       setError("无法读取报警数据，请确认 HMIStudio 本机服务正在运行。");
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const interval = window.setInterval(() => { void load(false); }, 5000);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   const acknowledge = async (alarmId: string) => {
     setBusyId(alarmId); setNotice(""); setError("");
