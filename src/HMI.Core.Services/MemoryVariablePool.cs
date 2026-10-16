@@ -241,8 +241,15 @@ public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvide
             "byte" => byte.MaxValue,
             "int" => short.MaxValue,
             "dint" => int.MaxValue,
+            "float" => float.MaxValue,
             _ => null
         };
+        if (type == "float" && number < -float.MaxValue)
+        {
+            reason = WriteFailureReason.ValueOutOfRange;
+            message = $"变量 {meta.VarId} 的值 {number} 超出 float 类型范围";
+            return false;
+        }
 
         if ((type is "byte" or "int" or "dint") && Math.Truncate(number) != number)
         {
