@@ -4,6 +4,7 @@ import Editor from "./Editor";
 import RuntimeScreen from "./RuntimeScreen";
 import AlarmCenter from "./AlarmCenter";
 import VariablesMonitor from "./VariablesMonitor";
+import DriverDiagnostics from "./DriverDiagnostics";
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Box, CheckCircle2,
   CircleHelp, Cpu, Gauge, RefreshCw, Send, Server, ShieldCheck,
@@ -40,7 +41,7 @@ function qualityLabel(q: Quality) {
 }
 
 export default function App() {
-  const [view, setView] = useState<"runtime" | "editor" | "screen" | "alarms" | "variables">("runtime");
+  const [view, setView] = useState<"runtime" | "editor" | "screen" | "alarms" | "variables" | "drivers">("runtime");
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [online, setOnline] = useState(false);
@@ -121,6 +122,7 @@ export default function App() {
   if (view === "screen") return <RuntimeScreen onBack={() => setView("runtime")} variables={variables} />;
   if (view === "alarms") return <AlarmCenter onBack={() => setView("runtime")} />;
   if (view === "variables") return <VariablesMonitor onBack={() => setView("runtime")} />;
+  if (view === "drivers") return <DriverDiagnostics onBack={() => setView("runtime")} />;
 
   const write = async (varId: string, value: unknown, message: string) => {
     setBusy(true); setNotice("");
@@ -164,7 +166,7 @@ export default function App() {
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("screen")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("screen"); }}><Activity size={17} />运行画面</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("editor")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("editor"); }}><Box size={17} />组态编辑</div>
         <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("alarms")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("alarms"); }}><AlertTriangle size={17} />报警中心 <span className="nav-count">{activeAlarmCount}</span></div>
-        <div className="nav-item"><Cpu size={17} />驱动诊断</div>
+        <div className="nav-item editor-nav-item" role="button" tabIndex={0} onClick={() => setView("drivers")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setView("drivers"); }}><Cpu size={17} />驱动诊断</div>
         <div className="sidebar-bottom">
           <div className="security-note"><ShieldCheck size={16} /><span>本机模拟运行环境<br /><small>未连接真实 PLC</small></span></div>
           <div className="sidebar-version">HMIStudio Preview · 0.1.0</div>

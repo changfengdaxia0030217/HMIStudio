@@ -29,6 +29,39 @@ app.MapGet("/api/health", (RuntimeProjectService runtime) => Results.Ok(new
 }));
 
 app.MapGet("/api/project", (RuntimeProjectService runtime) => Results.Ok(runtime.GetProjectSummary()));
+app.MapGet("/api/drivers", (RuntimeProjectService runtime) =>
+{
+    var drivers = runtime.Project.Variables
+        .Where(variable => variable.Kind == VariableKind.Plc &&
+                           variable.Source is not null &&
+                           !string.IsNullOrWhiteSpace(variable.Source.Channel))
+        .GroupBy(variable => variable.Source!.Channel, StringComparer.OrdinalIgnoreCase)
+        .Select(group =>
+        {
+            var variables = group.ToArray();
+            var driver = runtime.GetMockDriver(group.Key);
+            var variableDetails = variables.Select(variable => new
+            {
+                variable.VarId,
+                variable.Name,
+                variable.CycleMs,
+                Address = variable.Source?.Address,
+                Quality = runtime.Pool.GetQuality(variable.VarId).ToString()
+            }).ToArray();
+            var goodCount = variableDetails.Count(item => item.Quality == "Good");
+            return new
+            {
+                protocol = group.Key,
+                driverType = "模拟 PLC 驱动",
+                status = driver?.Status.ToString() ?? "Unavailable",
+                variableCount = variables.Length,
+                goodVariableCount = goodCount,
+                badVariableCount = variables.Length - goodCount,
+                variables = variableDetails
+            };
+        }).ToArray();
+    return Results.Ok(drivers);
+});
 app.MapGet("/api/screens", (RuntimeProjectService runtime) => Results.Ok(runtime.Project.Screens.Select(screen => new
 {
     screen.Id, screen.Title, screen.Background, screen.ScreenType, screen.Width, screen.Height,
