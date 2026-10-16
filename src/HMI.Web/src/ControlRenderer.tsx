@@ -56,12 +56,24 @@ export function ControlRenderer({ control, variables, selected = false, interact
   const targetVarId = String(resolveControlProperty(control, "writeVarId", variables, "") ?? "");
   const writeValue = resolveControlProperty(control, "writeValue", variables, "toggle");
   const navigateToScreenId = String(resolveControlProperty(control, "navigateToScreenId", variables, "") ?? "").trim();
+  const boundVariableIds = [...new Set(Object.values(control.properties ?? {})
+    .map(property => property?.source)
+    .filter((source): source is BoundSource => source?.type === "$var")
+    .map(source => String(source.varId ?? ""))
+    .filter(Boolean))];
+  const degradedVariable = boundVariableIds
+    .map(varId => variables[varId])
+    .find(variable => variable?.quality && variable.quality !== "Good");
+  const qualityLabel = degradedVariable?.quality === "BadComm" ? "通讯异常"
+    : degradedVariable?.quality === "BadNotExist" ? "变量不存在"
+      : degradedVariable?.quality === "Uncertain" ? "质量不确定"
+        : degradedVariable?.quality ? "变量质量异常" : "";
   const style: CSSProperties = {
     left: `${control.x / 12.8}%`, top: `${control.y / 7.2}%`,
     width: `${control.width / 12.8}%`, height: `${control.height / 7.2}%`,
     color, background, fontSize, cursor: interactive ? "move" : runtime && control.controlType === "Button" ? "pointer" : "default",
   };
-  return <div className={`hmi-control control-${control.controlType.toLowerCase()} ${selected ? "selected" : ""} ${className}`} style={style} onPointerDown={onPointerDown} data-control-id={control.id}>
+  return <div className={`hmi-control control-${control.controlType.toLowerCase()} ${selected ? "selected" : ""} ${degradedVariable ? "quality-degraded" : ""} ${className}`} style={style} onPointerDown={onPointerDown} data-control-id={control.id} data-quality-label={qualityLabel} title={qualityLabel || undefined}>
     {runtime && control.controlType === "Button"
       ? <button type="button" className="hmi-runtime-button" onPointerDown={event => event.stopPropagation()} onClick={() => {
           if (navigateToScreenId) {
@@ -73,7 +85,7 @@ export function ControlRenderer({ control, variables, selected = false, interact
           onWrite(targetVarId, parseWriteValue(writeValue, current));
         }}>{text}</button>
       : runtime && control.controlType === "NumericInput"
-        ? <input className="hmi-runtime-number" type="number" value={draft} disabled={!inputVariable?.writable || !onWrite}
+        ? <input className="hmi-runtime-number" type="number" value={draft} disabled={!inputVariable?.writable || !onWrite || Boolean(inputVariable?.quality && inputVariable.quality !== "Good")} title={inputVariable?.quality && inputVariable.quality !== "Good" ? (inputVariable.quality === "BadComm" ? "通讯异常，已禁用写入" : inputVariable.quality === "Uncertain" ? "变量质量不确定，已禁用写入" : "变量不可用，已禁用写入") : undefined}
             onPointerDown={event => event.stopPropagation()}
             onFocus={() => { editing.current = true; }}
             onChange={event => setDraft(event.target.value)}
