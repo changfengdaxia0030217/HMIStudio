@@ -269,6 +269,24 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                         errors.Add($"控件 {control.Id} 的属性 {property.Key} 引用了不存在的变量: {variableSource.VarId}");
                 }
 
+                if (string.Equals(control.ControlType, "NumericInput", StringComparison.OrdinalIgnoreCase) &&
+                    control.Properties.TryGetValue("text", out var inputBinding) &&
+                    inputBinding?.Source is VariablePropertySource inputSource)
+                {
+                    var inputVariable = Project.Variables.FirstOrDefault(variable =>
+                        string.Equals(variable.VarId, inputSource.VarId, StringComparison.Ordinal));
+                    if (inputVariable is null)
+                        errors.Add($"数值输入控件 {control.Id} 绑定了不存在的变量: {inputSource.VarId}");
+                    else
+                    {
+                        var inputType = inputVariable.DataType.Trim().ToLowerInvariant();
+                        if (inputType is not ("byte" or "int" or "dint" or "float" or "double" or "real"))
+                            errors.Add($"数值输入控件 {control.Id} 只能绑定数值类型变量，当前为 {inputVariable.DataType}");
+                        if (inputVariable.IsReadOnly)
+                            errors.Add($"数值输入控件 {control.Id} 不能写入只读变量: {inputVariable.VarId}");
+                    }
+                }
+
                 if (control.Properties.TryGetValue("writeVarId", out var writeBinding) &&
                     TryGetStaticPropertyString(writeBinding?.Source, out var writeVarId) &&
                     !string.IsNullOrWhiteSpace(writeVarId))
@@ -352,7 +370,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                     return false;
                 return IsNumericWriteValueInRange(variable, type, parsed);
             }
-            return type == "string";
+            return type == "string" && !string.Equals(text, "toggle", StringComparison.OrdinalIgnoreCase);
         }
 
         if (type == "bool") return value is bool;
