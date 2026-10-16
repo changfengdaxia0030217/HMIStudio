@@ -316,7 +316,13 @@ export default function Editor({ onBack }: { onBack: () => void }) {
       </main>
       <aside className="editor-inspector">
         <div className="editor-pane-title">属性检查器</div>
-        {!selected ? <div className="inspector-empty"><MousePointer2 size={22} /><strong>未选择控件</strong><span>在画布中选择一个控件<br />即可编辑其属性</span></div> : <>
+        {!selected ? <>
+          <div className="screen-inspector-title"><strong>画面属性</strong><small>当前画面</small></div>
+          <label className="editor-field"><span>画面名称</span><input value={screen.title} onChange={e => commitScreen({ ...screen, title: e.target.value })} /></label>
+          <label className="editor-field"><span>背景颜色</span><div className="editor-color-row"><input type="color" value={/^#[0-9a-f]{6}$/i.test(screen.background) ? screen.background : "#111827"} onChange={e => commitScreen({ ...screen, background: e.target.value })} /><span>{screen.background}</span></div></label>
+          <div className="inspector-empty"><MousePointer2 size={22} /><strong>未选择控件</strong><span>选择画面中的控件后<br />可编辑其位置、外观与变量绑定</span></div>
+          <div className="inspector-hint"><Grid2X2 size={14}/><span>画面名称和背景颜色会随“保存工程”写入 JSON 工程文件。</span></div>
+        </> : <>
           <div className="inspector-control-title"><span>{selected.controlType}</span><small>{selected.id}</small></div>
           <label className="editor-field"><span>控件名称</span><input value={selected.name} onChange={e => patchControl(selected.id, { name: e.target.value })} /></label>
           <div className="editor-field-grid">
