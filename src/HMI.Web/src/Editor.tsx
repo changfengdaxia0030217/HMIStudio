@@ -53,8 +53,8 @@ function validateScreenBindings(screen: Screen, variables: Variable[], screens: 
         } else if (["byte", "int", "dint", "float", "double", "real"].includes(dataType)) {
           const number = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : Number.NaN;
           const integerType = ["byte", "int", "dint"].includes(dataType);
-          const typeMin = dataType === "byte" ? 0 : dataType === "int" ? -32768 : dataType === "dint" ? -2147483648 : Number.NEGATIVE_INFINITY;
-          const typeMax = dataType === "byte" ? 255 : dataType === "int" ? 32767 : dataType === "dint" ? 2147483647 : Number.POSITIVE_INFINITY;
+          const typeMin = dataType === "byte" ? 0 : dataType === "int" ? -32768 : dataType === "dint" ? -2147483648 : dataType === "float" ? -3.4028234663852886e38 : Number.NEGATIVE_INFINITY;
+          const typeMax = dataType === "byte" ? 255 : dataType === "int" ? 32767 : dataType === "dint" ? 2147483647 : dataType === "float" ? 3.4028234663852886e38 : Number.POSITIVE_INFINITY;
           compatible = Number.isFinite(number) && (!integerType || Number.isInteger(number)) &&
             number >= typeMin && number <= typeMax &&
             (target.min == null || number >= target.min) && (target.max == null || number <= target.max);
