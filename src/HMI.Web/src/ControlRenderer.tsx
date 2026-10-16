@@ -24,9 +24,12 @@ function printable(value: unknown): string {
   return String(value);
 }
 function parseWriteValue(raw: unknown, current: unknown): unknown {
-  if (raw === "toggle") return typeof current === "boolean" ? !current : current;
-  if (raw === "true") return true;
-  if (raw === "false") return false;
+  if (typeof raw === "string" && raw.toLowerCase() === "toggle")
+    return typeof current === "boolean" ? !current : current;
+  if (typeof current === "boolean" && typeof raw === "string") {
+    if (raw.toLowerCase() === "true") return true;
+    if (raw.toLowerCase() === "false") return false;
+  }
   if (typeof current === "number" && String(raw).trim() !== "" && Number.isFinite(Number(raw))) return Number(raw);
   return raw;
 }
