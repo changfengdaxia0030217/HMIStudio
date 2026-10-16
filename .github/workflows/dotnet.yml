@@ -74,6 +74,13 @@ jobs:
             $setStartBody = @{ screenId = $newScreenId } | ConvertTo-Json
             $setStartReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/project/start-screen" -Method Put -ContentType "application/json" -Body $setStartBody -TimeoutSec 5
             if (-not $setStartReceipt.ok -or $setStartReceipt.startScreenId -ne $newScreenId) { throw "HMIStudio set-start-screen API returned failure" }
+            $startScreenDeleteRejected = $false
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/$newScreenId" -Method Delete -TimeoutSec 5 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $startScreenDeleteRejected = $true }
+            }
+            if (-not $startScreenDeleteRejected) { throw "HMIStudio allowed deleting the active start screen" }
             $projectAfterStartChange = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
             if ($projectAfterStartChange.startScreenId -ne $newScreenId) { throw "HMIStudio project did not persist its new start screen" }
             $restoreStartBody = @{ screenId = $projectSummary.startScreenId } | ConvertTo-Json
@@ -84,6 +91,17 @@ jobs:
             $screensAfterDelete = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
             $deletedStillListed = @($screensAfterDelete | Where-Object { $_.id -eq $newScreenId })
             if ($deletedStillListed.Count -gt 0) { throw "HMIStudio deleted screen is still listed" }
+            $remainingScreens = @(Invoke-RestMethod "http://127.0.0.1:5081/api/screens" -TimeoutSec 5)
+            if ($remainingScreens.Count -eq 1) {
+              $lastScreenId = $remainingScreens[0].id
+              $lastScreenDeleteRejected = $false
+              try {
+                Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/$lastScreenId" -Method Delete -TimeoutSec 5 | Out-Null
+              } catch {
+                if ($_.Exception.Response.StatusCode.value__ -eq 400) { $lastScreenDeleteRejected = $true }
+              }
+              if (-not $lastScreenDeleteRejected) { throw "HMIStudio allowed deleting the final project screen" }
+            }
             $writeBody = @{ value = 61.5; requestId = "ci-write-validation" } | ConvertTo-Json
             $writeReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/variables/line.targetSpeed/write" -Method Post -ContentType "application/json" -Body $writeBody -TimeoutSec 5
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }
