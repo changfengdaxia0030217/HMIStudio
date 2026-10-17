@@ -152,8 +152,8 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                 ON AlarmHistory (AlarmId, Sequence);
             CREATE INDEX IF NOT EXISTS IX_AlarmHistory_OccurredAt
                 ON AlarmHistory (OccurredAt DESC);
-            CREATE INDEX IF NOT EXISTS IX_AlarmHistory_EventType_Sequence
-                ON AlarmHistory (EventType, Sequence DESC);
+            CREATE INDEX IF NOT EXISTS IX_AlarmHistory_EventTypeLower_Sequence
+                ON AlarmHistory (lower(EventType), Sequence DESC);
             """;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
