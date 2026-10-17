@@ -285,6 +285,21 @@ jobs:
             $dateFilteredHistory = @(ConvertFrom-Json -InputObject $dateFilteredPayload)
             $dateFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5
             if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results ($($dateFilteredHistory.Count)) and count ($dateFilteredCount) do not agree for $historyDate" }
+            # Pagination boundaries must be normalized consistently by the public API.
+            $firstHistoryPage = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=0" -TimeoutSec 5)
+            $zeroLimitHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=0&offset=0" -TimeoutSec 5)
+            $negativeOffsetHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=-10" -TimeoutSec 5)
+            $maximumOffsetHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=2&offset=2147483647" -TimeoutSec 5)
+            if ($firstHistoryPage.Count -ne 1 -or $zeroLimitHistory.Count -ne 1 -or $negativeOffsetHistory.Count -ne 1) {
+              throw "Alarm history pagination did not normalize zero limit or negative offset to the documented boundaries"
+            }
+            if ($firstHistoryPage[0].sequence -ne $zeroLimitHistory[0].sequence -or $firstHistoryPage[0].sequence -ne $negativeOffsetHistory[0].sequence) {
+              throw "Alarm history pagination boundary results differ from limit=1, offset=0"
+            }
+            if ($maximumOffsetHistory.Count -ne 0) { throw "Alarm history returned records for the maximum integer offset" }
+            $acknowledgedHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?eventType=Acknowledged&limit=10" -TimeoutSec 5)
+            $acknowledgedCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Acknowledged" -TimeoutSec 5
+            if ($acknowledgedHistory.Count -ne [int]$acknowledgedCount) { throw "Filtered alarm history records and count disagree for eventType=Acknowledged" }
             $futurePayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5).Content
             $futureHistory = @(ConvertFrom-Json -InputObject $futurePayload)
             $futureCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5

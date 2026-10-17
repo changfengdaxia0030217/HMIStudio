@@ -687,14 +687,24 @@ public sealed class AlarmManagerTests
             var firstPage = await alarms.GetHistoryAsync(limit: 2, offset: 0);
             var secondPage = await alarms.GetHistoryAsync(limit: 2, offset: 2);
             var beyondEnd = await alarms.GetHistoryAsync(limit: 2, offset: 3);
+            var zeroLimit = await alarms.GetHistoryAsync(limit: 0, offset: 0);
+            var negativeOffset = await alarms.GetHistoryAsync(limit: 1, offset: -5);
+            var maximumOffset = await alarms.GetHistoryAsync(limit: 2, offset: int.MaxValue);
 
             Assert.Equal(2, firstPage.Count);
             Assert.Single(secondPage);
             Assert.Empty(beyondEnd);
+            Assert.Single(zeroLimit); // Limits are clamped to the supported minimum of one.
+            Assert.Equal(firstPage[0].Sequence, zeroLimit[0].Sequence);
+            Assert.Single(negativeOffset); // Negative offsets are normalized to zero.
+            Assert.Equal(firstPage[0].Sequence, negativeOffset[0].Sequence);
+            Assert.Empty(maximumOffset);
             Assert.Equal(new[] { "Recovered", "Acknowledged", "Triggered" },
                 firstPage.Concat(secondPage).Select(item => item.EventType));
             Assert.Equal(3, firstPage.Concat(secondPage).Select(item => item.Sequence).Distinct().Count());
             Assert.Equal(3, await alarms.GetHistoryCountAsync());
+            Assert.Equal(1, await alarms.GetHistoryCountAsync(eventType: "Acknowledged"));
+            Assert.Equal(1, (await alarms.GetHistoryAsync(limit: 10, eventType: "Acknowledged")).Count);
         }
         finally
         {
