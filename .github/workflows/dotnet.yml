@@ -148,6 +148,36 @@ jobs:
               if ($_.Exception.Response.StatusCode.value__ -eq 400) { $malformedVersionRejected = $true }
             }
             if (-not $malformedVersionRejected) { throw "HMIStudio did not reject an out-of-range backup format version with HTTP 400" }
+            # A database can pass SQLite integrity_check while still being structurally incompatible.
+            $malformedDbPath = Join-Path $env:RUNNER_TEMP "hmistudio-malformed-alarms.sqlite"
+            $malformedDbScript = "import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute('CREATE TABLE AlarmHistory (Sequence INTEGER PRIMARY KEY, AlarmId TEXT NOT NULL)'); db.commit(); db.close()"
+            & python -c $malformedDbScript $malformedDbPath
+            if ($LASTEXITCODE -ne 0) { throw "Could not create malformed alarm database fixture" }
+            $badSchemaBackupPath = Join-Path $env:RUNNER_TEMP "hmistudio-bad-alarm-schema.zip"
+            $sourceArchive = [System.IO.Compression.ZipFile]::OpenRead($backupPath)
+            $badSchemaArchive = [System.IO.Compression.ZipFile]::Open($badSchemaBackupPath, [System.IO.Compression.ZipArchiveMode]::Create)
+            try {
+              foreach ($entryName in @("manifest.json") + @($sourceArchive.Entries | Where-Object { $_.FullName -like "project/*.hmijob" } | ForEach-Object { $_.FullName })) {
+                $sourceEntry = $sourceArchive.GetEntry($entryName)
+                if ($null -eq $sourceEntry) { throw "Source backup is missing $entryName" }
+                $targetEntry = $badSchemaArchive.CreateEntry($entryName)
+                $sourceStream = $sourceEntry.Open()
+                $targetStream = $targetEntry.Open()
+                try { $sourceStream.CopyTo($targetStream) } finally { $targetStream.Dispose(); $sourceStream.Dispose() }
+              }
+              $dbEntry = $badSchemaArchive.CreateEntry("data/alarms.sqlite")
+              $dbSource = [System.IO.File]::OpenRead($malformedDbPath)
+              $dbTarget = $dbEntry.Open()
+              try { $dbSource.CopyTo($dbTarget) } finally { $dbTarget.Dispose(); $dbSource.Dispose() }
+            } finally { $badSchemaArchive.Dispose(); $sourceArchive.Dispose() }
+            $badSchemaRejected = $false
+            try {
+              $badSchemaInspection = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/inspect" -Method Post -Form @{ file = Get-Item $badSchemaBackupPath } -TimeoutSec 10
+              if (-not $badSchemaInspection.ok -or $badSchemaInspection.alarmDatabaseSchemaValid) { $badSchemaRejected = $true }
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $badSchemaRejected = $true }
+            }
+            if (-not $badSchemaRejected) { throw "HMIStudio accepted an alarm database missing required AlarmHistory columns" }
             $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
             $projectValidation = Invoke-RestMethod "http://127.0.0.1:5081/api/project/validate" -TimeoutSec 5
             if (-not $projectValidation.ok -or $projectValidation.errors.Count -gt 0) { throw "HMIStudio project validation failed: $($projectValidation.errors -join '; ')" }
