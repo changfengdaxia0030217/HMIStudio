@@ -219,9 +219,14 @@ public sealed class CoreRuntimeTests
         await manager.UnsubscribeAsync(new[] { "temperature" });
         var countAfterUnsubscribe = Volatile.Read(ref received);
         await manager.SubscribeAsync(new[] { "temperature" });
-        await Task.Delay(100);
 
-        Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe);
+        var resubscribeDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (Volatile.Read(ref received) <= countAfterUnsubscribe && DateTime.UtcNow < resubscribeDeadline)
+            await Task.Delay(20);
+
+        Assert.True(
+            Volatile.Read(ref received) > countAfterUnsubscribe,
+            "Polling did not resume within two seconds after the variable was resubscribed.");
         await manager.UnsubscribeAsync(new[] { "temperature" });
     }
 
