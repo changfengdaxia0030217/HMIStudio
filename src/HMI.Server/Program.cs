@@ -103,7 +103,7 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
 {
     const long maxBackupBytes = 25L * 1024 * 1024;
     if (file.Length <= 0 || file.Length > maxBackupBytes)
-        return Results.BadRequest(new { ok = false, error = "备份文件为空或超过 25 MB 限制" });
+        return (IResult)Results.BadRequest(new { ok = false, error = "备份文件为空或超过 25 MB 限制" });
 
     var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"hmistudio-inspect-{Guid.NewGuid():N}");
     Directory.CreateDirectory(temporaryDirectory);
@@ -119,17 +119,17 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
             .ToArray();
         var alarmEntry = archive.GetEntry("data/alarms.sqlite");
         if (manifestEntry is null || projectEntries.Length != 1)
-            return Results.BadRequest(new { ok = false, error = "备份包结构无效：必须包含 manifest.json 和唯一的 project/*.hmijob" });
+            return (IResult)Results.BadRequest(new { ok = false, error = "备份包结构无效：必须包含 manifest.json 和唯一的 project/*.hmijob" });
         if (manifestEntry.Length > 64 * 1024 || projectEntries[0].Length > 10 * 1024 * 1024 ||
             (alarmEntry is not null && alarmEntry.Length > maxBackupBytes))
-            return Results.BadRequest(new { ok = false, error = "备份包中的文件超过允许大小" });
+            return (IResult)Results.BadRequest(new { ok = false, error = "备份包中的文件超过允许大小" });
 
         using var manifestStream = manifestEntry.Open();
         using var manifestDocument = await JsonDocument.ParseAsync(manifestStream, cancellationToken: ct);
         var manifest = manifestDocument.RootElement;
         if (!manifest.TryGetProperty("product", out var product) || product.GetString() != "HMIStudio" ||
             !manifest.TryGetProperty("backupFormatVersion", out var formatVersion) || formatVersion.GetInt32() != 1)
-            return Results.BadRequest(new { ok = false, error = "不支持的 HMIStudio 备份格式" });
+            return (IResult)Results.BadRequest(new { ok = false, error = "不支持的 HMIStudio 备份格式" });
 
         var projectPath = Path.Combine(temporaryDirectory, "inspect.hmijob");
         await using (var input = projectEntries[0].Open())
@@ -166,7 +166,7 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
 
         var projectFileName = projectEntries[0].FullName["project/".Length..];
         var valid = projectErrors.Count == 0 && (alarmEntry is null || alarmDatabaseCheck == "ok");
-        return Results.Ok(new
+        return (IResult)Results.Ok(new
         {
             ok = valid,
             backupFormatVersion = 1,
@@ -187,7 +187,7 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or SqliteException or InvalidOperationException or ArgumentException)
     {
-        return Results.BadRequest(new { ok = false, error = "无法读取备份包：" + ex.Message });
+        return (IResult)Results.BadRequest(new { ok = false, error = "无法读取备份包：" + ex.Message });
     }
     finally
     {
