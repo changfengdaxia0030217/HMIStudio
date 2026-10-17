@@ -440,13 +440,15 @@ app.MapGet("/api/trends", async (string? varId, string? from, string? to, int? l
 
 static bool IsValidAlarmDateRange(string? fromDate, string? toDate)
 {
+    fromDate = string.IsNullOrWhiteSpace(fromDate) ? null : fromDate.Trim();
+    toDate = string.IsNullOrWhiteSpace(toDate) ? null : toDate.Trim();
     const System.Globalization.DateTimeStyles styles = System.Globalization.DateTimeStyles.None;
-    var fromValid = string.IsNullOrWhiteSpace(fromDate) ||
+    var fromValid = fromDate is null ||
         DateOnly.TryParseExact(fromDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, styles, out _);
-    var toValid = string.IsNullOrWhiteSpace(toDate) ||
+    var toValid = toDate is null ||
         DateOnly.TryParseExact(toDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, styles, out _);
     if (!fromValid || !toValid) return false;
-    if (!string.IsNullOrWhiteSpace(fromDate) && !string.IsNullOrWhiteSpace(toDate))
+    if (fromDate is not null && toDate is not null)
         return DateOnly.ParseExact(fromDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) <=
             DateOnly.ParseExact(toDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
     return true;
