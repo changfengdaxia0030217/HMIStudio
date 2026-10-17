@@ -135,7 +135,7 @@ public static class BackupRestoreService
         var dbExisted = File.Exists(alarmPath);
         if (projectExisted) File.Copy(projectPath, Path.Combine(rollback, "project.original"), true);
         if (dbExisted && hasDb) File.Copy(alarmPath, Path.Combine(rollback, "alarms.original"), true);
-        await File.WriteAllTextAsync(Path.Combine(rollback, "state.json"), JsonSerializer.Serialize(new { projectExisted, dbExisted = hasDb && dbExisted }), ct);
+        await File.WriteAllTextAsync(Path.Combine(rollback, "state.json"), JsonSerializer.Serialize(new { projectExisted, alarmDatabaseWasTouched = hasDb, dbExisted }), ct);
 
         try
         {
