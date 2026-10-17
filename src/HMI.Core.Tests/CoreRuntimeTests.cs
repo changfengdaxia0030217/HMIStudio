@@ -3,6 +3,7 @@ using HMI.Core.Model;
 using HMI.Core.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
