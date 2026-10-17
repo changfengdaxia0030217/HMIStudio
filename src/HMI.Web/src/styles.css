@@ -90,3 +90,8 @@
 .trend-error button{border:1px solid #75434b;background:#3b2530;color:#ffe0df;border-radius:6px;padding:7px 10px;cursor:pointer}
 @media(max-width:850px){.trend-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.trend-select-wrap{grid-column:1/-1}.trend-heading{align-items:flex-start;flex-direction:column}.trend-refresh{width:100%}}
 @media(max-width:520px){.trend-page{padding:22px 12px}.trend-heading h1{font-size:24px}.trend-summary{grid-template-columns:1fr}.trend-select-wrap{grid-column:auto}.trend-panel-heading{align-items:flex-start;flex-direction:column}.trend-chart-footer{flex-direction:column}}
+
+.trend-heading-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.trend-export{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #315144;background:#15382f;color:#a6efd2;border-radius:7px;padding:11px 14px;font-size:11px;cursor:pointer;white-space:nowrap}
+.trend-export:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:850px){.trend-heading-actions{width:100%}.trend-heading-actions button{flex:1}}
