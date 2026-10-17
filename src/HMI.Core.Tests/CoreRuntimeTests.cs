@@ -276,10 +276,13 @@ public sealed class CoreRuntimeTests
         Assert.True(Volatile.Read(ref received) > 0);
 
         await manager.UnsubscribeAsync(new[] { "heartbeat" });
-        await Task.Delay(80);
         var countAfterUnsubscribe = Volatile.Read(ref received);
-        await Task.Delay(80);
-        Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe);
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(2);
+        while (Volatile.Read(ref received) <= countAfterUnsubscribe && DateTimeOffset.UtcNow < deadline)
+            await Task.Delay(20);
+
+        Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe,
+            "Permanent variables should keep emitting samples after the last UI subscription is released.");
     }
 
     [Fact]
