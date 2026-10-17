@@ -193,6 +193,29 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                     break;
             }
         }
+
+        // A rule may have been removed or disabled while the service was stopped.
+        // Such alarms cannot be evaluated again, so close them explicitly instead of
+        // restoring them forever as active alarms after every restart.
+        var configuredRuleIds = _rules.Select(rule => rule.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var staleAlarm in _activeById.Values
+                     .Where(alarm => !configuredRuleIds.Contains(alarm.RuleId))
+                     .ToArray())
+        {
+            await InsertEventAsync(new AlarmEventRecord
+            {
+                AlarmId = staleAlarm.AlarmId,
+                RuleId = staleAlarm.RuleId,
+                RuleName = staleAlarm.RuleName,
+                VarId = staleAlarm.VarId,
+                EventType = "Recovered",
+                Message = staleAlarm.Message,
+                Value = staleAlarm.Value,
+                Quality = "Good",
+                OccurredAt = DateTimeOffset.UtcNow
+            }, ct).ConfigureAwait(false);
+            _activeById.Remove(staleAlarm.AlarmId);
+        }
     }
 
     public async Task<IReadOnlyList<ActiveAlarm>> GetActiveAsync(CancellationToken ct = default)
