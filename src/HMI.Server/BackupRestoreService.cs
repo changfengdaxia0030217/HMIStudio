@@ -164,7 +164,9 @@ public static class BackupRestoreService
         if (root.GetProperty("projectExisted").GetBoolean())
         {
             var original = Path.Combine(rollback, "project.original");
-            if (File.Exists(original)) await ReplaceFileAsync(original, projectPath, ct);
+            if (!File.Exists(original))
+                throw new InvalidDataException("恢复回滚失败：缺少原始工程备份，已保留回滚日志供人工恢复");
+            await ReplaceFileAsync(original, projectPath, ct);
         }
         else if (File.Exists(projectPath)) File.Delete(projectPath);
         if (root.GetProperty("alarmDatabaseWasTouched").GetBoolean())
@@ -172,7 +174,9 @@ public static class BackupRestoreService
             if (root.GetProperty("dbExisted").GetBoolean())
             {
                 var original = Path.Combine(rollback, "alarms.original");
-                if (File.Exists(original)) await ReplaceFileAsync(original, alarmPath, ct);
+                if (!File.Exists(original))
+                    throw new InvalidDataException("恢复回滚失败：缺少原始报警数据库备份，已保留回滚日志供人工恢复");
+                await ReplaceFileAsync(original, alarmPath, ct);
             }
             else if (File.Exists(alarmPath))
             {
