@@ -329,7 +329,41 @@ jobs:
             $historyAfterRestart = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20" -TimeoutSec 5)
             $restartEventTypes = @($historyAfterRestart | ForEach-Object { $_.eventType })
             if ($restartEventTypes -notcontains "Triggered" -or $restartEventTypes -notcontains "Acknowledged" -or $restartEventTypes -notcontains "Recovered") { throw "Alarm history did not survive runtime restart" }
-            Write-Host "Runtime API ready; variable count: $($variables.Count); variable write verified; screen save survived restart"
+            # End-to-end restore test: stage a known-good snapshot, prove the live runtime is unchanged,
+            # then restart and verify the snapshot was applied before the project is loaded.
+            $restoreBackupPath = Join-Path $env:RUNNER_TEMP "hmistudio-restore-test.zip"
+            Invoke-WebRequest "http://127.0.0.1:5081/api/backup" -OutFile $restoreBackupPath -TimeoutSec 15
+            $restoreSnapshotScreen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($restoreSnapshotScreen.title -ne "CI save validation") { throw "Unexpected screen title before restore snapshot: $($restoreSnapshotScreen.title)" }
+            $alteredRestoreScreen = $restoreSnapshotScreen | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+            $alteredRestoreScreen.title = "CI restore altered"
+            $alteredRestoreBody = $alteredRestoreScreen | ConvertTo-Json -Depth 50
+            $alteredRestoreReceipt = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/screens/main" -Method Put -ContentType "application/json" -Body $alteredRestoreBody -TimeoutSec 5
+            if (-not $alteredRestoreReceipt.ok) { throw "Could not prepare altered project for restore smoke test" }
+            $stagedRestore = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/restore" -Method Post -Form @{ file = Get-Item $restoreBackupPath } -TimeoutSec 15
+            if (-not $stagedRestore.ok -or -not $stagedRestore.restartRequired) { throw "HMIStudio restore endpoint did not stage a valid backup" }
+            $liveBeforeRestoreRestart = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($liveBeforeRestoreRestart.title -ne "CI restore altered") { throw "Restore changed the live project before restart" }
+            & taskkill /PID $server.Id /T /F | Out-Null
+            $server.WaitForExit(10000) | Out-Null
+            Start-Sleep -Seconds 2
+            $server = Start-Process dotnet -ArgumentList @("run", "--no-build", "--project", "src/HMI.Server", "--configuration", "Release") -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\hmistudio-server-restore.log" -RedirectStandardError "$env:RUNNER_TEMP\hmistudio-server-restore-error.log"
+            $restoreHealth = $null
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 2
+              try { $restoreHealth = Invoke-RestMethod "http://127.0.0.1:5081/api/health" -TimeoutSec 3; break } catch { if ($server.HasExited) { break } }
+            }
+            if ($null -eq $restoreHealth -or $restoreHealth.status -ne "ok") {
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server-restore.log" -ErrorAction SilentlyContinue
+              Get-Content "$env:RUNNER_TEMP\hmistudio-server-restore-error.log" -ErrorAction SilentlyContinue
+              throw "HMIStudio failed to start with a staged restore"
+            }
+            $screenAfterRestore = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
+            if ($screenAfterRestore.title -ne "CI save validation") { throw "Staged restore did not restore the project snapshot: $($screenAfterRestore.title)" }
+            $historyAfterRestore = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20" -TimeoutSec 5)
+            $restoreEventTypes = @($historyAfterRestore | ForEach-Object { $_.eventType })
+            if ($restoreEventTypes -notcontains "Triggered" -or $restoreEventTypes -notcontains "Acknowledged" -or $restoreEventTypes -notcontains "Recovered") { throw "Staged restore did not restore the alarm history snapshot" }
+            Write-Host "Runtime API ready; variable count: $($variables.Count); variable write, screen persistence, and staged restore verified"
           } finally {
             if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
           }
