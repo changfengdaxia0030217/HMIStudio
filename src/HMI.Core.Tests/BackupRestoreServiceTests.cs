@@ -171,7 +171,9 @@ public sealed class BackupRestoreServiceTests
             await Assert.ThrowsAsync<InvalidDataException>(() =>
                 BackupRestoreService.ApplyPendingAsync(root, projectPath, alarmPath, CancellationToken.None));
 
-            Assert.Equal("original-project", await File.ReadAllTextAsync(projectPath));
+            // Do not restore only one half of the transaction when another
+            // required original is missing; keep both live files and the journal intact.
+            Assert.Equal("partially-replaced-project", await File.ReadAllTextAsync(projectPath));
             Assert.Equal("partially-replaced-database", await File.ReadAllTextAsync(alarmPath));
             Assert.True(File.Exists(Path.Combine(rollback, "state.json")));
             Assert.True(Directory.Exists(pending));
