@@ -91,6 +91,16 @@ jobs:
             $drivers = @(Invoke-RestMethod "http://127.0.0.1:5081/api/drivers" -TimeoutSec 5)
             if ($drivers.Count -lt 1) { throw "HMIStudio runtime returned no configured drivers" }
             if ($drivers[0].variableCount -lt 1 -or $drivers[0].variables.Count -lt 1) { throw "HMIStudio driver diagnostics returned no mapped variables" }
+            $backupPath = Join-Path $env:RUNNER_TEMP "hmistudio-backup-smoke.zip"
+            Invoke-WebRequest "http://127.0.0.1:5081/api/backup" -OutFile $backupPath -TimeoutSec 15
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $backupArchive = [System.IO.Compression.ZipFile]::OpenRead($backupPath)
+            try {
+              $backupEntries = @($backupArchive.Entries | ForEach-Object { $_.FullName })
+              if ($backupEntries -notcontains "manifest.json") { throw "Backup ZIP has no manifest" }
+              if (-not ($backupEntries | Where-Object { $_ -like "project/*.hmijob" })) { throw "Backup ZIP has no project JSON" }
+              if ($backupEntries -notcontains "data/alarms.sqlite") { throw "Backup ZIP has no SQLite alarm history" }
+            } finally { $backupArchive.Dispose() }
             $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
             $projectValidation = Invoke-RestMethod "http://127.0.0.1:5081/api/project/validate" -TimeoutSec 5
             if (-not $projectValidation.ok -or $projectValidation.errors.Count -gt 0) { throw "HMIStudio project validation failed: $($projectValidation.errors -join '; ')" }
