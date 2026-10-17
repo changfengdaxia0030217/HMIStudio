@@ -73,8 +73,12 @@ public sealed class AlarmManagerTests
                 Assert.Equal(alarmId, restored.AlarmId);
                 Assert.True(restored.Acknowledged);
                 Assert.NotNull(restored.AcknowledgedAt);
+                var restoredHistory = await restarted.GetHistoryAsync(10);
                 Assert.Equal(new[] { "Acknowledged", "Triggered" },
-                    (await restarted.GetHistoryAsync(10)).Select(item => item.EventType));
+                    restoredHistory.Select(item => item.EventType));
+                var acknowledgement = Assert.Single(restoredHistory, item => item.EventType == "Acknowledged");
+                Assert.Equal(alarmId, acknowledgement.AlarmId);
+                Assert.Equal(acknowledgement.OccurredAt, restored.AcknowledgedAt);
 
                 Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
                 await WaitForHistoryCountAsync(restarted, 3);
@@ -262,10 +266,10 @@ public sealed class AlarmManagerTests
             Assert.Equal(3, history.Count);
             Assert.Equal(1, history.Count(item => item.EventType == "Recovered"));
             Assert.Equal(2, history.Count(item => item.EventType == "Triggered"));
-            Assert.Single(history.Where(item =>
-                item.RuleId == "temperature-critical" && item.EventType == "Recovered"));
-            Assert.Single(history.Where(item =>
-                item.RuleId == "temperature-warning" && item.EventType == "Triggered"));
+            Assert.Single(history, item =>
+                item.RuleId == "temperature-critical" && item.EventType == "Recovered");
+            Assert.Single(history, item =>
+                item.RuleId == "temperature-warning" && item.EventType == "Triggered");
         }
         finally
         {
