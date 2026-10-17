@@ -119,6 +119,36 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task StartupEvaluationWaitsForGoodQuality()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            pool.SetQuality("temperature", VariableQuality.BadComm);
+
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+            await Task.Delay(100);
+
+            Assert.Empty(await alarms.GetActiveAsync());
+            Assert.Equal(0, await alarms.GetHistoryCountAsync());
+
+            pool.SetQuality("temperature", VariableQuality.Good);
+            await WaitForHistoryCountAsync(alarms, 1);
+
+            var active = Assert.Single(await alarms.GetActiveAsync());
+            Assert.Equal("high-temperature", active.RuleId);
+            Assert.Equal("Triggered", Assert.Single(await alarms.GetHistoryAsync()).EventType);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task DisposedManagerUnsubscribesFromVariableChanges()
     {
         var directory = CreateTempDirectory();
