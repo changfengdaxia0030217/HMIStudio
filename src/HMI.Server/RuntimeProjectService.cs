@@ -81,6 +81,19 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             _logger.LogInformation("HMIStudio 工程已加载: {ProjectPath}; variables={VariableCount}; screens={ScreenCount}",
                 ProjectPath, _project.Variables.Count, _project.Screens.Count);
         }
+        catch
+        {
+            // Startup can fail after some services have already acquired resources.
+            // Roll those resources back so a retry does not mistake a partial runtime
+            // for a successfully initialized one.
+            try { await DisposeRuntimeServicesAsync(); }
+            catch (Exception cleanupError)
+            {
+                _logger.LogError(cleanupError, "HMIStudio 启动失败后的资源清理也发生错误");
+            }
+            _project = null;
+            throw;
+        }
         finally { _startGate.Release(); }
     }
 
@@ -138,41 +151,46 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
         await _startGate.WaitAsync();
         try
         {
-            var trends = _trends;
-            var alarms = _alarms;
-            var subscriptions = _subscriptions;
-            var pool = _pool;
-            var drivers = _drivers;
-
-            // Clear published references before disposing. A second shutdown call
-            // is then harmless, and callers cannot acquire a service being torn down.
-            _trends = null;
-            _alarms = null;
-            _subscriptions = null;
-            _pool = null;
-            _drivers = null;
-
-            List<Exception>? failures = null;
-            async ValueTask TryDisposeAsync(Func<ValueTask> dispose)
-            {
-                try { await dispose(); }
-                catch (Exception ex) { (failures ??= new List<Exception>()).Add(ex); }
-            }
-
-            if (trends is not null) await TryDisposeAsync(trends.DisposeAsync);
-            if (alarms is not null) await TryDisposeAsync(alarms.DisposeAsync);
-            if (subscriptions is not null) await TryDisposeAsync(subscriptions.DisposeAsync);
-            if (pool is not null) await TryDisposeAsync(pool.DisposeAsync);
-            if (drivers is not null) await TryDisposeAsync(drivers.DisposeAsync);
-
-            if (failures is { Count: 1 }) throw failures[0];
-            if (failures is { Count: > 1 })
-                throw new AggregateException("一个或多个 HMIStudio 运行时服务关闭失败", failures);
+            await DisposeRuntimeServicesAsync();
         }
         finally
         {
             _startGate.Release();
         }
+    }
+
+    private async ValueTask DisposeRuntimeServicesAsync()
+    {
+        var trends = _trends;
+        var alarms = _alarms;
+        var subscriptions = _subscriptions;
+        var pool = _pool;
+        var drivers = _drivers;
+
+        // Clear published references before disposing. A second shutdown call
+        // is then harmless, and callers cannot acquire a service being torn down.
+        _trends = null;
+        _alarms = null;
+        _subscriptions = null;
+        _pool = null;
+        _drivers = null;
+
+        List<Exception>? failures = null;
+        async ValueTask TryDisposeAsync(Func<ValueTask> dispose)
+        {
+            try { await dispose(); }
+            catch (Exception ex) { (failures ??= new List<Exception>()).Add(ex); }
+        }
+
+        if (trends is not null) await TryDisposeAsync(trends.DisposeAsync);
+        if (alarms is not null) await TryDisposeAsync(alarms.DisposeAsync);
+        if (subscriptions is not null) await TryDisposeAsync(subscriptions.DisposeAsync);
+        if (pool is not null) await TryDisposeAsync(pool.DisposeAsync);
+        if (drivers is not null) await TryDisposeAsync(drivers.DisposeAsync);
+
+        if (failures is { Count: 1 }) throw failures[0];
+        if (failures is { Count: > 1 })
+            throw new AggregateException("一个或多个 HMIStudio 运行时服务关闭失败", failures);
     }
 
     public async Task<string?> DeleteScreenAsync(string screenId, CancellationToken cancellationToken = default)
