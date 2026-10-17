@@ -191,8 +191,15 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
             alarmDatabaseCheck = Convert.ToString(await integrityCommand.ExecuteScalarAsync(ct));
 
             await using var schemaCommand = database.CreateCommand();
-            schemaCommand.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'AlarmHistory';";
-            alarmDatabaseSchemaValid = Convert.ToInt64(await schemaCommand.ExecuteScalarAsync(ct)) == 1;
+            schemaCommand.CommandText = """
+                SELECT COUNT(*)
+                FROM pragma_table_info('AlarmHistory')
+                WHERE name IN (
+                    'Sequence', 'AlarmId', 'RuleId', 'RuleName', 'VarId',
+                    'EventType', 'Message', 'Value', 'Quality', 'OccurredAt'
+                );
+                """;
+            alarmDatabaseSchemaValid = Convert.ToInt64(await schemaCommand.ExecuteScalarAsync(ct)) == 10;
         }
 
         var alarmDatabaseValid = alarmEntry is null || (alarmDatabaseCheck == "ok" && alarmDatabaseSchemaValid == true);
