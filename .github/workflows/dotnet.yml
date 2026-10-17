@@ -332,7 +332,7 @@ jobs:
             $alarmCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-alarm-history.csv"
             Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000" -OutFile $alarmCsvPath -TimeoutSec 5
             $alarmCsv = Get-Content -Path $alarmCsvPath -Raw
-            if ($alarmCsv -notmatch "Sequence,AlarmId,RuleId" -or $alarmCsv -notmatch "Triggered" -or $alarmCsv -notmatch "Acknowledged") { throw "Alarm history CSV export is incomplete" }
+            if ($alarmCsv -notmatch '"Sequence","AlarmId","RuleId"' -or $alarmCsv -notmatch "Triggered" -or $alarmCsv -notmatch "Acknowledged") { throw "Alarm history CSV export is incomplete" }
             # End-to-end restore test: stage a known-good snapshot, prove the live runtime is unchanged,
             # then restart and verify the snapshot was applied before the project is loaded.
             $invalidRestorePath = Join-Path $env:RUNNER_TEMP "hmistudio-invalid-restore.zip"
