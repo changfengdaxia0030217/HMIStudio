@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Clock3, Download, RefreshCw, ShieldAlert } from "lucide-react";
 
 const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -42,8 +42,10 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const latestLoadRequest = useRef(0);
 
   const load = useCallback(async (showSpinner = true) => {
+    const requestId = ++latestLoadRequest.current;
     if (showSpinner) setLoading(true);
     try {
       const filters = new URLSearchParams({
@@ -60,6 +62,8 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
       ]);
       if (!activeResponse.ok || !historyResponse.ok || !countResponse.ok) throw new Error("报警接口返回异常状态");
       const [activeItems, historyItems, historyCount] = await Promise.all([activeResponse.json(), historyResponse.json(), countResponse.json()]);
+      // Filter changes and the periodic refresh can overlap; only the newest request may update the UI.
+      if (requestId !== latestLoadRequest.current) return;
       setActive(activeItems as ActiveAlarm[]);
       setHistory(historyItems as AlarmEvent[]);
       setHistoryTotal(historyCount as number);
@@ -67,14 +71,17 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     } catch {
       setError("无法读取报警数据，请确认 HMIStudio 本机服务正在运行。");
     } finally {
-      if (showSpinner) setLoading(false);
+      if (requestId === latestLoadRequest.current && showSpinner) setLoading(false);
     }
   }, [historyEventType, historySearch, historyFromDate, historyToDate, historyPage]);
 
   useEffect(() => {
     void load();
     const interval = window.setInterval(() => { void load(false); }, 5000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      latestLoadRequest.current += 1;
+    };
   }, [load]);
 
   const acknowledge = async (alarmId: string) => {
