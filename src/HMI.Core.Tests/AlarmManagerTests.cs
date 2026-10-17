@@ -639,6 +639,35 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task HistoryDateFiltersRejectInvalidDatesAndReversedRanges()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                alarms.GetHistoryAsync(fromDate: "not-a-date"));
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                alarms.GetHistoryCountAsync(toDate: "2026-13-45"));
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                alarms.GetHistoryAsync(fromDate: "2026-10-18", toDate: "2026-10-17"));
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                alarms.GetHistoryCountAsync(fromDate: "2026-10-18", toDate: "2026-10-17"));
+
+            // Blank optional dates are treated as omitted filters, not malformed dates.
+            Assert.Empty(await alarms.GetHistoryAsync(fromDate: " ", toDate: ""));
+            Assert.Equal(0, await alarms.GetHistoryCountAsync(fromDate: " ", toDate: ""));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task HistoryPaginationReturnsStableNonOverlappingPages()
     {
         var directory = CreateTempDirectory();
