@@ -71,6 +71,13 @@ public sealed class ActionEngine : IActionEngine
             {
                 await ExecuteNodeAsync(node, context, nodeCt);
             }
+            // Caller cancellation is a control-flow signal, not a node failure. A linked
+            // timeout token is also cancelled when the caller cancels, so distinguish the
+            // caller token first to avoid swallowing shutdown/request cancellation.
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (OperationCanceledException) when (timeoutCts?.IsCancellationRequested == true)
             {
                 await _log.LogAsync("WARN", $"动作节点超时: {node.ActionType}");
