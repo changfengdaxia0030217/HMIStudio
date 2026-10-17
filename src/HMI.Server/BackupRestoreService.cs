@@ -167,10 +167,17 @@ public static class BackupRestoreService
             if (File.Exists(original)) await ReplaceFileAsync(original, projectPath, ct);
         }
         else if (File.Exists(projectPath)) File.Delete(projectPath);
-        if (root.GetProperty("dbExisted").GetBoolean())
+        if (root.GetProperty("alarmDatabaseWasTouched").GetBoolean())
         {
-            var original = Path.Combine(rollback, "alarms.original");
-            if (File.Exists(original)) await ReplaceFileAsync(original, alarmPath, ct);
+            if (root.GetProperty("dbExisted").GetBoolean())
+            {
+                var original = Path.Combine(rollback, "alarms.original");
+                if (File.Exists(original)) await ReplaceFileAsync(original, alarmPath, ct);
+            }
+            else if (File.Exists(alarmPath))
+            {
+                File.Delete(alarmPath);
+            }
         }
         // If the restore payload did not include alarms, it never touched the live database.
         Directory.Delete(rollback, true);
