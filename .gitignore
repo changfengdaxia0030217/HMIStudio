@@ -16,3 +16,6 @@ data/
 # Frontend generated dependencies and TypeScript build metadata
 src/HMI.Web/node_modules/
 src/HMI.Web/tsconfig.tsbuildinfo
+
+# Generated Windows portable release package
+artifacts/
