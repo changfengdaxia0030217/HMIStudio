@@ -384,12 +384,12 @@ app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, 
 app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetActiveAsync(ct)));
 
-app.MapGet("/api/alarms/history", async (int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
-    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct)));
+app.MapGet("/api/alarms/history", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
+    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search)));
 
-app.MapGet("/api/alarms/history.csv", async (int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
+app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
 {
-    var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct);
+    var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct, eventType, search);
     static string Csv(string? value) => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
     var csv = new StringBuilder();
     csv.AppendLine(string.Join(",", new[] { "Sequence", "AlarmId", "RuleId", "RuleName", "VarId", "EventType", "Message", "Value", "Quality", "OccurredAt" }.Select(Csv)));

@@ -208,18 +208,33 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         finally { _stateGate.Release(); }
     }
 
-    public async Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(int limit = 100, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(
+        int limit = 100,
+        CancellationToken ct = default,
+        string? eventType = null,
+        string? search = null)
     {
         limit = Math.Clamp(limit, 1, 1000);
+        eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         var result = new List<AlarmEventRecord>();
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
         var command = connection.CreateCommand();
         command.CommandText = """
             SELECT Sequence, AlarmId, RuleId, RuleName, VarId, EventType, Message, Value, Quality, OccurredAt
-            FROM AlarmHistory ORDER BY Sequence DESC LIMIT $limit;
+            FROM AlarmHistory
+            WHERE ($eventType IS NULL OR lower(EventType) = lower($eventType))
+              AND ($search IS NULL OR instr(lower(
+                    coalesce(AlarmId, '') || ' ' || coalesce(RuleId, '') || ' ' ||
+                    coalesce(RuleName, '') || ' ' || coalesce(VarId, '') || ' ' ||
+                    coalesce(Message, '') || ' ' || coalesce(Value, '') || ' ' ||
+                    coalesce(Quality, '')), lower($search)) > 0)
+            ORDER BY Sequence DESC LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", limit);
+        command.Parameters.AddWithValue("$eventType", (object?)eventType ?? DBNull.Value);
+        command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
             result.Add(ReadEvent(reader));

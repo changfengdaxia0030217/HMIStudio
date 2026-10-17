@@ -31,6 +31,9 @@ function eventLabel(value: string) {
 export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [active, setActive] = useState<ActiveAlarm[]>([]);
   const [history, setHistory] = useState<AlarmEvent[]>([]);
+  const [historyEventType, setHistoryEventType] = useState("");
+  const [historySearchInput, setHistorySearchInput] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
@@ -41,7 +44,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     try {
       const [activeResponse, historyResponse] = await Promise.all([
         fetch(`${API}/api/alarms/active`),
-        fetch(`${API}/api/alarms/history?limit=200`),
+        fetch(`${API}/api/alarms/history?${new URLSearchParams({ limit: "200", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) })}`),
       ]);
       if (!activeResponse.ok || !historyResponse.ok) throw new Error("报警接口返回异常状态");
       const [activeItems, historyItems] = await Promise.all([activeResponse.json(), historyResponse.json()]);
@@ -53,7 +56,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, []);
+  }, [historyEventType, historySearch]);
 
   useEffect(() => {
     void load();
@@ -86,7 +89,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
         </div>
         <div className="alarm-page-actions">
           <button className="alarm-secondary-button" onClick={onBack}>返回运行总览</button>
-          <button className="alarm-secondary-button" onClick={() => { window.location.href = `${API}/api/alarms/history.csv?limit=1000`; }}><Download size={14} />导出历史 CSV</button>
+          <button className="alarm-secondary-button" onClick={() => { const query = new URLSearchParams({ limit: "1000", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) }); window.location.href = `${API}/api/alarms/history.csv?${query}`; }}><Download size={14} />导出当前筛选 CSV</button>
           <button className="alarm-secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw size={14} />{loading ? "刷新中…" : "刷新"}</button>
         </div>
       </div>
@@ -115,6 +118,20 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
 
       <section className="panel alarm-table-panel">
         <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件</p></div><span className="table-count">{history.length} 条</span></div>
+        <div className="alarm-history-filters">
+          <label>事件类型
+            <select value={historyEventType} onChange={event => setHistoryEventType(event.target.value)}>
+              <option value="">全部事件</option><option value="Triggered">触发</option><option value="Acknowledged">已确认</option><option value="Recovered">已恢复</option>
+            </select>
+          </label>
+          <form onSubmit={event => { event.preventDefault(); setHistorySearch(historySearchInput.trim()); }}>
+            <label>关键词
+              <input value={historySearchInput} onChange={event => setHistorySearchInput(event.target.value)} placeholder="报警名称、变量、消息…" />
+            </label>
+            <button className="alarm-secondary-button" type="submit">查询</button>
+            <button className="alarm-secondary-button" type="button" onClick={() => { setHistorySearchInput(""); setHistorySearch(""); setHistoryEventType(""); }}>清除</button>
+          </form>
+        </div>
         <div className="table-wrap"><table><thead><tr><th>序号</th><th>事件</th><th>报警名称</th><th>变量</th><th>记录值</th><th>质量</th><th>发生时间</th></tr></thead><tbody>
           {history.map(item => <tr key={item.sequence}>
             <td className="alarm-sequence">{item.sequence}</td><td><span className={`alarm-event-tag event-${item.eventType.toLowerCase()}`}>{eventLabel(item.eventType)}</span></td>
@@ -123,7 +140,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
           </tr>)}
           {!history.length && <tr><td colSpan={7} className="empty-state">{loading ? "正在读取报警历史…" : "暂无报警历史记录"}</td></tr>}
         </tbody></table></div>
-        <div className="table-footer"><span><Check size={14} />历史由本机 SQLite 保存</span><span>仅展示最近 200 条记录</span></div>
+        <div className="table-footer"><span><Check size={14} />历史由本机 SQLite 保存</span><span>最多显示 200 条匹配记录</span></div>
       </section>
     </div>
   );
