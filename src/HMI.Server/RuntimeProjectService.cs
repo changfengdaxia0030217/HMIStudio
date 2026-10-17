@@ -133,16 +133,46 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_trends is not null) await _trends.DisposeAsync();
-        if (_alarms is not null) await _alarms.DisposeAsync();
-        if (_subscriptions is not null) await _subscriptions.DisposeAsync();
-        if (_pool is not null) await _pool.DisposeAsync();
-        if (_drivers is not null) await _drivers.DisposeAsync();
-        _trends = null;
-        _alarms = null;
-        _subscriptions = null;
-        _pool = null;
-        _drivers = null;
+        // Serialize shutdown with startup so StopAsync cannot tear down services
+        // while StartAsync is still constructing the runtime.
+        await _startGate.WaitAsync();
+        try
+        {
+            var trends = _trends;
+            var alarms = _alarms;
+            var subscriptions = _subscriptions;
+            var pool = _pool;
+            var drivers = _drivers;
+
+            // Clear published references before disposing. A second shutdown call
+            // is then harmless, and callers cannot acquire a service being torn down.
+            _trends = null;
+            _alarms = null;
+            _subscriptions = null;
+            _pool = null;
+            _drivers = null;
+
+            List<Exception>? failures = null;
+            async ValueTask TryDisposeAsync(Func<ValueTask> dispose)
+            {
+                try { await dispose(); }
+                catch (Exception ex) { (failures ??= new List<Exception>()).Add(ex); }
+            }
+
+            if (trends is not null) await TryDisposeAsync(trends.DisposeAsync);
+            if (alarms is not null) await TryDisposeAsync(alarms.DisposeAsync);
+            if (subscriptions is not null) await TryDisposeAsync(subscriptions.DisposeAsync);
+            if (pool is not null) await TryDisposeAsync(pool.DisposeAsync);
+            if (drivers is not null) await TryDisposeAsync(drivers.DisposeAsync);
+
+            if (failures is { Count: 1 }) throw failures[0];
+            if (failures is { Count: > 1 })
+                throw new AggregateException("一个或多个 HMIStudio 运行时服务关闭失败", failures);
+        }
+        finally
+        {
+            _startGate.Release();
+        }
     }
 
     public async Task<string?> DeleteScreenAsync(string screenId, CancellationToken cancellationToken = default)
