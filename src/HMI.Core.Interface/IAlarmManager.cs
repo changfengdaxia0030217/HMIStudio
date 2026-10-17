@@ -11,5 +11,6 @@ public interface IAlarmManager
         int limit = 100,
         CancellationToken ct = default,
         string? eventType = null,
-        string? search = null);
+        string? search = null,
+        int offset = 0);
 }

@@ -212,9 +212,11 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         int limit = 100,
         CancellationToken ct = default,
         string? eventType = null,
-        string? search = null)
+        string? search = null,
+        int offset = 0)
     {
         limit = Math.Clamp(limit, 1, 1000);
+        offset = Math.Clamp(offset, 0, int.MaxValue);
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         var result = new List<AlarmEventRecord>();
@@ -230,9 +232,10 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                     coalesce(RuleName, '') || ' ' || coalesce(VarId, '') || ' ' ||
                     coalesce(Message, '') || ' ' || coalesce(Value, '') || ' ' ||
                     coalesce(Quality, '')), lower($search)) > 0)
-            ORDER BY Sequence DESC LIMIT $limit;
+            ORDER BY Sequence DESC LIMIT $limit OFFSET $offset;
             """;
         command.Parameters.AddWithValue("$limit", limit);
+        command.Parameters.AddWithValue("$offset", offset);
         command.Parameters.AddWithValue("$eventType", (object?)eventType ?? DBNull.Value);
         command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);

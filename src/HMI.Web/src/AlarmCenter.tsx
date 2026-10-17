@@ -34,6 +34,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [historyEventType, setHistoryEventType] = useState("");
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+  const [historyPage, setHistoryPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
@@ -44,7 +45,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     try {
       const [activeResponse, historyResponse] = await Promise.all([
         fetch(`${API}/api/alarms/active`),
-        fetch(`${API}/api/alarms/history?${new URLSearchParams({ limit: "200", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) })}`),
+        fetch(`${API}/api/alarms/history?${new URLSearchParams({ limit: "200", offset: String(historyPage * 200), ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) })}`),
       ]);
       if (!activeResponse.ok || !historyResponse.ok) throw new Error("报警接口返回异常状态");
       const [activeItems, historyItems] = await Promise.all([activeResponse.json(), historyResponse.json()]);
@@ -56,7 +57,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [historyEventType, historySearch]);
+  }, [historyEventType, historySearch, historyPage]);
 
   useEffect(() => {
     void load();
@@ -120,16 +121,16 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
         <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件</p></div><span className="table-count">{history.length} 条</span></div>
         <div className="alarm-history-filters">
           <label>事件类型
-            <select value={historyEventType} onChange={event => setHistoryEventType(event.target.value)}>
+            <select value={historyEventType} onChange={event => { setHistoryEventType(event.target.value); setHistoryPage(0); }}>
               <option value="">全部事件</option><option value="Triggered">触发</option><option value="Acknowledged">已确认</option><option value="Recovered">已恢复</option>
             </select>
           </label>
-          <form onSubmit={event => { event.preventDefault(); setHistorySearch(historySearchInput.trim()); }}>
+          <form onSubmit={event => { event.preventDefault(); setHistorySearch(historySearchInput.trim()); setHistoryPage(0); }}>
             <label>关键词
               <input value={historySearchInput} onChange={event => setHistorySearchInput(event.target.value)} placeholder="报警名称、变量、消息…" />
             </label>
             <button className="alarm-secondary-button" type="submit">查询</button>
-            <button className="alarm-secondary-button" type="button" onClick={() => { setHistorySearchInput(""); setHistorySearch(""); setHistoryEventType(""); }}>清除</button>
+            <button className="alarm-secondary-button" type="button" onClick={() => { setHistorySearchInput(""); setHistorySearch(""); setHistoryEventType(""); setHistoryPage(0); }}>清除</button>
           </form>
         </div>
         <div className="table-wrap"><table><thead><tr><th>序号</th><th>事件</th><th>报警名称</th><th>变量</th><th>记录值</th><th>质量</th><th>发生时间</th></tr></thead><tbody>
@@ -140,7 +141,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
           </tr>)}
           {!history.length && <tr><td colSpan={7} className="empty-state">{loading ? "正在读取报警历史…" : "暂无报警历史记录"}</td></tr>}
         </tbody></table></div>
-        <div className="table-footer"><span><Check size={14} />历史由本机 SQLite 保存</span><span>最多显示 200 条匹配记录</span></div>
+        <div className="table-footer alarm-history-pagination"><span><Check size={14} />历史由本机 SQLite 保存</span><span>第 {historyPage + 1} 页 · 每页最多 200 条</span><div><button className="alarm-secondary-button" disabled={historyPage === 0 || loading} onClick={() => setHistoryPage(page => Math.max(0, page - 1))}>上一页</button><button className="alarm-secondary-button" disabled={history.length < 200 || loading} onClick={() => setHistoryPage(page => page + 1)}>下一页</button></div></div>
       </section>
     </div>
   );

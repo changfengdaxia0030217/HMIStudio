@@ -384,8 +384,8 @@ app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, 
 app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetActiveAsync(ct)));
 
-app.MapGet("/api/alarms/history", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
-    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search)));
+app.MapGet("/api/alarms/history", async (int? limit, int? offset, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
+    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search, offset ?? 0)));
 
 app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
 {

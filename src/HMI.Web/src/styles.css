@@ -48,3 +48,7 @@
 .alarm-history-filters form{display:flex;align-items:flex-end;gap:8px;flex:1;justify-content:flex-end}
 .alarm-history-filters form label{flex:1;max-width:360px}
 @media(max-width:760px){.alarm-history-filters{align-items:stretch;flex-direction:column}.alarm-history-filters select,.alarm-history-filters input{width:100%;min-width:0}.alarm-history-filters form{flex-wrap:wrap;justify-content:stretch}.alarm-history-filters form label{flex-basis:100%;max-width:none}.alarm-history-filters form button{flex:1}}
+
+.alarm-history-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.alarm-history-pagination>div{display:flex;gap:8px}
+.alarm-history-pagination button:disabled{opacity:.4;cursor:not-allowed}
