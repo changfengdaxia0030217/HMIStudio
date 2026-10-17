@@ -27,6 +27,23 @@
 
 云端服务通过端口转发访问，默认用于开发预览，不应放入真实生产数据，也不要连接真实 PLC。Codespaces 是否可用及运行时长取决于 GitHub 账户额度。首次启动会从仓库分支创建独立云端环境，不会自动合并到 `main`。
 
+## 发布 Windows x64 便携版
+
+开发者在 Windows x64 环境安装 .NET 10 SDK 和 Node.js 20+ 后，在仓库根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Publish-HMIStudio-Windows.ps1
+```
+
+脚本会构建前端，并发布自包含的 Windows x64 后端，生成：
+
+- `artifacts/HMIStudio-win-x64/`：便携版完整目录
+- `artifacts/HMIStudio-win-x64.zip`：可分发压缩包
+
+目标电脑无需安装 .NET Runtime、.NET SDK 或 Node.js。将 ZIP 解压到可写入的本地目录，然后运行 `Start-HMIStudio.ps1`。首次启动会在发布目录创建 `data` 文件夹，用于工程 JSON 与 SQLite 报警历史。升级前请备份该目录。
+
+GitHub Actions 会构建发布包并启动自包含程序，检查健康 API、前端页面和变量 API。便携版仍仅供本机模拟使用，不要将服务暴露到不可信网络。
+
 ## 快速启动（Windows）
 
 前置条件：安装 **.NET 10 SDK** 与 **Node.js 20+**，并允许 PowerShell 执行本地脚本。
