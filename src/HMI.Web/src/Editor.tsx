@@ -111,7 +111,8 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [backupInspection, setBackupInspection] = useState<null | { ok: boolean; error?: string; projectValid?: boolean; projectErrors?: string[]; projectFile?: string; screenCount?: number; variableCount?: number; startScreenId?: string; alarmHistoryIncluded?: boolean; alarmDatabaseIntegrity?: string; alarmDatabaseSchemaValid?: boolean; message?: string }>(null);
-  const [inspectingBackup, setInspectingBackup] = useState(false);\n  const [restoringBackup, setRestoringBackup] = useState(false);
+  const [inspectingBackup, setInspectingBackup] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
   const backupFileRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(1);
   const [hasClipboard, setHasClipboard] = useState(false);
