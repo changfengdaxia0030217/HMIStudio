@@ -22,6 +22,8 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     private readonly SemaphoreSlim _stateGate = new(1, 1);
     private readonly Dictionary<string, ActiveAlarm> _activeById = new(StringComparer.Ordinal);
     private Task _worker = Task.CompletedTask;
+    private readonly object _disposeLock = new();
+    private Task? _disposeTask;
     private bool _disposed;
 
     private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath, Action<Exception>? onError)
@@ -532,9 +534,17 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        lock (_disposeLock)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
         _disposed = true;
         _changeLease.Dispose();
         _changes.Writer.TryComplete();
