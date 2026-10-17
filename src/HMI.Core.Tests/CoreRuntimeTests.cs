@@ -297,21 +297,43 @@ public sealed class CoreRuntimeTests
             await runtime.StartAsync(CancellationToken.None);
             var projectPath = runtime.ProjectPath;
             Assert.True(File.Exists(projectPath));
-            var originalScreenIds = runtime.Project.Screens.Select(screen => screen.Id).ToArray();
             var originalVariableIds = runtime.Project.Variables.Select(variable => variable.VarId).ToArray();
+
+            // Exercise the same persistence APIs used by the editor.
+            var createErrors = await runtime.CreateScreenAsync(new HmiScreen
+            {
+                Id = "lifecycle-check",
+                Title = "Lifecycle check"
+            });
+            Assert.Empty(createErrors);
+
+            Assert.Null(await runtime.SetStartScreenAsync("lifecycle-check"));
+            var editedScreen = new HmiScreen
+            {
+                Id = "lifecycle-check",
+                Title = "Persisted lifecycle screen",
+                Background = "#123456"
+            };
+            Assert.Empty(await runtime.SaveScreenAsync("lifecycle-check", editedScreen));
+            var expectedScreenIds = runtime.Project.Screens.Select(screen => screen.Id).ToArray();
 
             // Repeated host start notifications must not create duplicate runtime services.
             await runtime.StartAsync(CancellationToken.None);
-            Assert.Equal(originalScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal(expectedScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal("lifecycle-check", runtime.Project.StartScreenId);
             Assert.Equal(originalVariableIds, runtime.Project.Variables.Select(variable => variable.VarId));
 
             await runtime.StopAsync(CancellationToken.None);
             await runtime.DisposeAsync();
 
-            // A later start on the same service instance must load the saved project again.
+            // A later start on the same service instance must load the saved edits again.
             await runtime.StartAsync(CancellationToken.None);
             Assert.Equal(projectPath, runtime.ProjectPath);
-            Assert.Equal(originalScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal(expectedScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal("lifecycle-check", runtime.Project.StartScreenId);
+            var reloadedScreen = Assert.Single(runtime.Project.Screens.Where(screen => screen.Id == "lifecycle-check"));
+            Assert.Equal("Persisted lifecycle screen", reloadedScreen.Title);
+            Assert.Equal("#123456", reloadedScreen.Background);
             Assert.Equal(originalVariableIds, runtime.Project.Variables.Select(variable => variable.VarId));
             Assert.Empty(await runtime.ValidateProjectAsync());
         }
