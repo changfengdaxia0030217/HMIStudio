@@ -24,7 +24,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     private Task _worker = Task.CompletedTask;
     private readonly object _disposeLock = new();
     private Task? _disposeTask;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     private AlarmManager(MemoryVariablePool pool, IEnumerable<AlarmRule> rules, string databasePath, Action<Exception>? onError)
     {
@@ -224,9 +224,11 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
 
     public async Task<IReadOnlyList<ActiveAlarm>> GetActiveAsync(CancellationToken ct = default)
     {
+        ThrowIfDisposed();
         await _stateGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            ThrowIfDisposed();
             return _activeById.Values
                 .OrderByDescending(alarm => alarm.TriggeredAt)
                 .Select(Clone)
@@ -242,6 +244,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         string? fromDate = null,
         string? toDate = null)
     {
+        ThrowIfDisposed();
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         await using var connection = new SqliteConnection(_connectionString);
@@ -276,6 +279,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         string? fromDate = null,
         string? toDate = null)
     {
+        ThrowIfDisposed();
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Clamp(offset, 0, int.MaxValue);
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
@@ -312,9 +316,11 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     public async Task AcknowledgeAsync(string alarmId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(alarmId);
+        ThrowIfDisposed();
         await _stateGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            ThrowIfDisposed();
             if (!_activeById.TryGetValue(alarmId, out var active))
                 throw new KeyNotFoundException($"活动报警不存在: {alarmId}");
             if (active.Acknowledged) return;
@@ -549,6 +555,13 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         _changeLease.Dispose();
         _changes.Writer.TryComplete();
         await _worker.ConfigureAwait(false);
-        _stateGate.Dispose();
+
+        // Drain any in-flight public operation before disposal completes. Keep the semaphore
+        // undisposed so callers already queued at shutdown can acquire it, observe _disposed,
+        // and fail predictably rather than racing SemaphoreSlim.Dispose().
+        await _stateGate.WaitAsync().ConfigureAwait(false);
+        _stateGate.Release();
     }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }
