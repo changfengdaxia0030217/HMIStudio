@@ -348,6 +348,64 @@ public sealed class CoreRuntimeTests
         }
     }
 
+    [Fact]
+    public async Task RejectedProjectEditsLeaveMemoryAndPersistedFileUnchanged()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"hmistudio-invalid-edit-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using var runtime = new HMI.Server.RuntimeProjectService(
+                new TestWebHostEnvironment(root),
+                NullLogger<HMI.Server.RuntimeProjectService>.Instance);
+            await runtime.StartAsync(CancellationToken.None);
+
+            var screen = Assert.Single(runtime.Project.Screens);
+            var originalId = screen.Id;
+            var originalTitle = screen.Title;
+            var originalBackground = screen.Background;
+            var originalStartScreenId = runtime.Project.StartScreenId;
+            var projectBytesBefore = await File.ReadAllBytesAsync(runtime.ProjectPath);
+
+            var invalidSave = new HmiScreen
+            {
+                Id = originalId,
+                Title = " ",
+                Background = "#ff0000",
+                Width = screen.Width,
+                Height = screen.Height,
+                Controls = screen.Controls
+            };
+            var saveErrors = await runtime.SaveScreenAsync(originalId, invalidSave);
+            Assert.NotEmpty(saveErrors);
+
+            var duplicateCreateErrors = await runtime.CreateScreenAsync(new HmiScreen
+            {
+                Id = originalId,
+                Title = "Duplicate screen",
+                Width = 1280,
+                Height = 720
+            });
+            Assert.NotEmpty(duplicateCreateErrors);
+
+            var missingStartScreenError = await runtime.SetStartScreenAsync("screen-does-not-exist");
+            Assert.NotNull(missingStartScreenError);
+
+            var currentScreen = Assert.Single(runtime.Project.Screens);
+            Assert.Equal(originalId, currentScreen.Id);
+            Assert.Equal(originalTitle, currentScreen.Title);
+            Assert.Equal(originalBackground, currentScreen.Background);
+            Assert.Equal(originalStartScreenId, runtime.Project.StartScreenId);
+            Assert.Equal(projectBytesBefore, await File.ReadAllBytesAsync(runtime.ProjectPath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private sealed class TestWebHostEnvironment(string contentRootPath) : IWebHostEnvironment
     {
         public string ApplicationName { get; set; } = typeof(TestWebHostEnvironment).Assembly.FullName!;
