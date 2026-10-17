@@ -619,7 +619,7 @@ public sealed class AlarmManagerTests
                 await alarms.GetHistoryCountAsync(search: "  TEMPERATURE EXCEEDS LIMIT  "));
             var combinedFilters = await alarms.GetHistoryAsync(10, eventType: "  triggered ", search: " TEMPERATURE EXCEEDS LIMIT ");
             Assert.Single(combinedFilters);
-            Assert.Equal(combinedFilters.Count,
+            Assert.Equal(1,
                 await alarms.GetHistoryCountAsync(eventType: "  TRIGGERED ", search: " temperature exceeds limit "));
 
             var sameDay = await alarms.GetHistoryAsync(10, fromDate: fromDate, toDate: toDate);
@@ -780,12 +780,14 @@ public sealed class AlarmManagerTests
 
     private static async Task WaitForHistoryCountAsync(AlarmManager alarms, int expectedCount)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        // CI runners can be heavily loaded while SQLite and the asynchronous alarm
+        // consumer are starting; allow enough time for legitimate queued transitions.
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
         while (DateTimeOffset.UtcNow < deadline)
         {
             if ((await alarms.GetHistoryAsync(100)).Count >= expectedCount)
                 return;
-            await Task.Delay(20);
+            await Task.Delay(25);
         }
 
         Assert.True((await alarms.GetHistoryAsync(100)).Count >= expectedCount,
