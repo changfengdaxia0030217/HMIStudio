@@ -218,6 +218,36 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task ConcurrentDisposeCallsAreSafeAndWaitForShutdown()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+
+            var disposeCalls = Enumerable.Range(0, 8)
+                .Select(_ => alarms.DisposeAsync().AsTask())
+                .ToArray();
+            await Task.WhenAll(disposeCalls);
+
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+            await Task.Delay(100);
+            var history = await alarms.GetHistoryAsync(10);
+            Assert.Single(history);
+            Assert.Equal("Triggered", history[0].EventType);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task MultipleRulesForOneVariableMaintainIndependentLifecycles()
     {
         var directory = CreateTempDirectory();
