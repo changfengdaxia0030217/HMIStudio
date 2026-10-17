@@ -111,6 +111,12 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
     {
         await using var upload = file.OpenReadStream();
         using var archive = new ZipArchive(upload, ZipArchiveMode.Read, leaveOpen: false);
+        var duplicateEntry = archive.Entries
+            .GroupBy(entry => entry.FullName, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateEntry is not null)
+            return (IResult)Results.BadRequest(new { ok = false, error = $"备份包包含重复条目: {duplicateEntry.Key}" });
+
         var manifestEntry = archive.GetEntry("manifest.json");
         var projectEntries = archive.Entries
             .Where(entry => entry.FullName.StartsWith("project/", StringComparison.Ordinal) &&
@@ -118,6 +124,12 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
                             !entry.FullName["project/".Length..].Contains('/'))
             .ToArray();
         var alarmEntry = archive.GetEntry("data/alarms.sqlite");
+        var allowedEntries = new HashSet<string>(StringComparer.Ordinal) { "manifest.json", "data/alarms.sqlite" };
+        foreach (var projectEntry in projectEntries) allowedEntries.Add(projectEntry.FullName);
+        var unexpectedEntry = archive.Entries.FirstOrDefault(entry =>
+            entry.FullName.EndsWith("/", StringComparison.Ordinal) || !allowedEntries.Contains(entry.FullName));
+        if (unexpectedEntry is not null)
+            return (IResult)Results.BadRequest(new { ok = false, error = $"备份包包含不支持的条目: {unexpectedEntry.FullName}" });
         if (manifestEntry is null || projectEntries.Length != 1)
             return (IResult)Results.BadRequest(new { ok = false, error = "备份包结构无效：必须包含 manifest.json 和唯一的 project/*.hmijob" });
         if (manifestEntry.Length > 64 * 1024 || projectEntries[0].Length > 10 * 1024 * 1024 ||
@@ -130,6 +142,15 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
         if (!manifest.TryGetProperty("product", out var product) || product.GetString() != "HMIStudio" ||
             !manifest.TryGetProperty("backupFormatVersion", out var formatVersion) || formatVersion.GetInt32() != 1)
             return (IResult)Results.BadRequest(new { ok = false, error = "不支持的 HMIStudio 备份格式" });
+
+        var projectFileName = projectEntries[0].FullName["project/".Length..];
+        if (!manifest.TryGetProperty("projectFile", out var declaredProjectFile) ||
+            declaredProjectFile.ValueKind != JsonValueKind.String ||
+            !string.Equals(declaredProjectFile.GetString(), projectFileName, StringComparison.Ordinal) ||
+            !manifest.TryGetProperty("alarmHistoryIncluded", out var declaredAlarmHistory) ||
+            (declaredAlarmHistory.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
+            declaredAlarmHistory.GetBoolean() != (alarmEntry is not null))
+            return (IResult)Results.BadRequest(new { ok = false, error = "备份清单与实际文件不一致" });
 
         var projectPath = Path.Combine(temporaryDirectory, "inspect.hmijob");
         await using (var input = projectEntries[0].Open())
@@ -164,7 +185,6 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
             alarmDatabaseCheck = Convert.ToString(await command.ExecuteScalarAsync(ct));
         }
 
-        var projectFileName = projectEntries[0].FullName["project/".Length..];
         var valid = projectErrors.Count == 0 && (alarmEntry is null || alarmDatabaseCheck == "ok");
         return (IResult)Results.Ok(new
         {
