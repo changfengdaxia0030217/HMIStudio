@@ -384,6 +384,60 @@ app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, 
 app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetActiveAsync(ct)));
 
+app.MapGet("/api/trends/variables", (RuntimeProjectService runtime) =>
+    Results.Ok(runtime.Project.Variables.Select(variable => new
+    {
+        variable.VarId,
+        variable.Name,
+        variable.DataType,
+        variable.CycleMs,
+        Quality = runtime.Pool.GetQuality(variable.VarId).ToString()
+    })));
+
+app.MapGet("/api/trends/count", async (string? varId, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    if (!string.IsNullOrWhiteSpace(varId) &&
+        !runtime.Project.Variables.Any(variable => string.Equals(variable.VarId, varId, StringComparison.Ordinal)))
+        return (IResult)Results.NotFound(new { error = "变量不存在", varId });
+    return (IResult)Results.Ok(new { count = await runtime.Trends.GetCountAsync(varId, ct) });
+});
+
+app.MapGet("/api/trends", async (string? varId, string? from, string? to, int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(varId))
+        return (IResult)Results.BadRequest(new { error = "必须提供 varId 参数" });
+
+    DateTimeOffset? fromTime = null;
+    DateTimeOffset? toTime = null;
+    if (!string.IsNullOrWhiteSpace(from))
+    {
+        if (!DateTimeOffset.TryParse(from, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var parsedFrom))
+            return (IResult)Results.BadRequest(new { error = "from 必须是有效的 ISO 8601 时间" });
+        fromTime = parsedFrom;
+    }
+    if (!string.IsNullOrWhiteSpace(to))
+    {
+        if (!DateTimeOffset.TryParse(to, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTo))
+            return (IResult)Results.BadRequest(new { error = "to 必须是有效的 ISO 8601 时间" });
+        toTime = parsedTo;
+    }
+    if (fromTime.HasValue && toTime.HasValue && fromTime.Value > toTime.Value)
+        return (IResult)Results.BadRequest(new { error = "from 不能晚于 to" });
+    if (!runtime.Project.Variables.Any(variable => string.Equals(variable.VarId, varId, StringComparison.Ordinal)))
+        return (IResult)Results.NotFound(new { error = "变量不存在", varId });
+
+    var samples = await runtime.Trends.QueryAsync(varId, fromTime, toTime, limit ?? 1000, ct);
+    return (IResult)Results.Ok(new
+    {
+        varId,
+        count = samples.Count,
+        limit = Math.Clamp(limit ?? 1000, 1, 10000),
+        samples
+    });
+});
+
 static bool IsValidAlarmDateRange(string? fromDate, string? toDate)
 {
     const System.Globalization.DateTimeStyles styles = System.Globalization.DateTimeStyles.None;
