@@ -203,13 +203,17 @@ public sealed class AlarmManagerTests
 
             await alarms.DisposeAsync();
 
-            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
-            await Task.Delay(150);
+            // A disposed manager rejects queries; reopen the same database to verify
+            // that the post-disposal variable write did not create a recovery event.
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.GetHistoryAsync(10));
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
 
-            var history = await alarms.GetHistoryAsync(10);
+            await using var reopened = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+            var history = await reopened.GetHistoryAsync(10);
             Assert.Single(history);
             Assert.Equal("Triggered", history[0].EventType);
-            Assert.Equal(1, await alarms.GetHistoryCountAsync());
+            Assert.Equal(1, await reopened.GetHistoryCountAsync());
         }
         finally
         {
@@ -235,9 +239,12 @@ public sealed class AlarmManagerTests
                 .ToArray();
             await Task.WhenAll(disposeCalls);
 
-            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
-            await Task.Delay(100);
-            var history = await alarms.GetHistoryAsync(10);
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.GetHistoryAsync(10));
+
+            await using var reopened = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+            var history = await reopened.GetHistoryAsync(10);
             Assert.Single(history);
             Assert.Equal("Triggered", history[0].EventType);
         }
