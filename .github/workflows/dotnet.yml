@@ -102,7 +102,7 @@ jobs:
               if ($backupEntries -notcontains "data/alarms.sqlite") { throw "Backup ZIP has no SQLite alarm history" }
             } finally { $backupArchive.Dispose() }
             $backupInspection = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/inspect" -Method Post -Form @{ file = Get-Item $backupPath } -TimeoutSec 15
-            if (-not $backupInspection.ok -or -not $backupInspection.projectValid -or -not $backupInspection.alarmHistoryIncluded -or $backupInspection.alarmDatabaseIntegrity -ne "ok") {
+            if (-not $backupInspection.ok -or -not $backupInspection.projectValid -or -not $backupInspection.alarmHistoryIncluded -or $backupInspection.alarmDatabaseIntegrity -ne "ok" -or -not $backupInspection.alarmDatabaseSchemaValid) {
               throw "HMIStudio backup inspection did not validate the exported archive"
             }
             $invalidBackupPath = Join-Path $env:RUNNER_TEMP "hmistudio-invalid-backup.zip"

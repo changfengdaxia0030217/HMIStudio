@@ -171,6 +171,7 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
         }
 
         string? alarmDatabaseCheck = null;
+        bool? alarmDatabaseSchemaValid = null;
         if (alarmEntry is not null)
         {
             var alarmPath = Path.Combine(temporaryDirectory, "alarms.sqlite");
@@ -185,12 +186,17 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
                 Pooling = false
             }.ToString());
             await database.OpenAsync(ct);
-            await using var command = database.CreateCommand();
-            command.CommandText = "PRAGMA integrity_check;";
-            alarmDatabaseCheck = Convert.ToString(await command.ExecuteScalarAsync(ct));
+            await using var integrityCommand = database.CreateCommand();
+            integrityCommand.CommandText = "PRAGMA integrity_check;";
+            alarmDatabaseCheck = Convert.ToString(await integrityCommand.ExecuteScalarAsync(ct));
+
+            await using var schemaCommand = database.CreateCommand();
+            schemaCommand.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'AlarmHistory';";
+            alarmDatabaseSchemaValid = Convert.ToInt64(await schemaCommand.ExecuteScalarAsync(ct)) == 1;
         }
 
-        var valid = projectErrors.Count == 0 && (alarmEntry is null || alarmDatabaseCheck == "ok");
+        var alarmDatabaseValid = alarmEntry is null || (alarmDatabaseCheck == "ok" && alarmDatabaseSchemaValid == true);
+        var valid = projectErrors.Count == 0 && alarmDatabaseValid;
         return (IResult)Results.Ok(new
         {
             ok = valid,
@@ -203,6 +209,7 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
             startScreenId = project?.StartScreenId,
             alarmHistoryIncluded = alarmEntry is not null,
             alarmDatabaseIntegrity = alarmDatabaseCheck,
+            alarmDatabaseSchemaValid,
             message = valid ? "备份包结构和内容校验通过；此操作未修改当前工程。" : "备份包校验未通过；当前工程未被修改。"
         });
     }
