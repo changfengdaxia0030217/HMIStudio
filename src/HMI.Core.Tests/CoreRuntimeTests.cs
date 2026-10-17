@@ -178,6 +178,21 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
+    public async Task DisposeAsyncCanBeCalledMoreThanOnce()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "temperature", Name = "Temperature", InitialValue = 21, CycleMs = 20 }
+        });
+        var manager = new VariableSubscriptionManager(pool);
+
+        await manager.SubscribeAsync(new[] { "temperature" });
+        await manager.DisposeAsync();
+        await manager.DisposeAsync();
+    }
+
+    [Fact]
     public async Task PermanentVariableRemainsPolledAfterSubscriptionIsReleased()
     {
         await using var pool = new MemoryVariablePool();
