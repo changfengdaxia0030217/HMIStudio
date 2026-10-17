@@ -69,9 +69,10 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
       setHistoryTotal(historyCount as number);
       setError("");
     } catch {
-      setError("无法读取报警数据，请确认 HMIStudio 本机服务正在运行。");
+      if (requestId === latestLoadRequest.current)
+        setError("无法读取报警数据，请确认 HMIStudio 本机服务正在运行。");
     } finally {
-      if (requestId === latestLoadRequest.current && showSpinner) setLoading(false);
+      if (requestId === latestLoadRequest.current) setLoading(false);
     }
   }, [historyEventType, historySearch, historyFromDate, historyToDate, historyPage]);
 
