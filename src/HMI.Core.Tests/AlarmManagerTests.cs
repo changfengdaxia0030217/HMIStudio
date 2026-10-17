@@ -248,6 +248,28 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task DisposedManagerRejectsFurtherOperations()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+            await alarms.DisposeAsync();
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.GetActiveAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.GetHistoryAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.GetHistoryCountAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => alarms.AcknowledgeAsync("missing-alarm"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task MultipleRulesForOneVariableMaintainIndependentLifecycles()
     {
         var directory = CreateTempDirectory();
