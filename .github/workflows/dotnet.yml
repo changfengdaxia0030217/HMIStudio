@@ -334,6 +334,12 @@ jobs:
             Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high&fromDate=$historyDate&toDate=$historyDate" -OutFile $filteredCsvPath -TimeoutSec 5
             $filteredCsv = Get-Content -Path $filteredCsvPath -Raw
             if ($filteredCsv -notmatch "Triggered" -or $filteredCsv -match "Acknowledged" -or $filteredCsv -notmatch "target-speed-high") { throw "Alarm history CSV did not preserve the selected filters" }
+            $normalizedCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-normalized-alarm-history.csv"
+            Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=%20tRiGgErEd%20&search=%20TARGET-SPEED-HIGH%20" -OutFile $normalizedCsvPath -TimeoutSec 5
+            $normalizedCsv = Get-Content -Path $normalizedCsvPath -Raw
+            if ($normalizedCsv -notmatch "Triggered" -or $normalizedCsv -match "Acknowledged" -or $normalizedCsv -notmatch "target-speed-high") {
+              throw "Alarm history CSV filter normalization differs from history list/count endpoints"
+            }
             $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })
             if ($activeAfterRecovery.Count -ne 0) { throw "Recovered alarm remains active: $(ConvertTo-Json -InputObject $activeAfterRecovery -Depth 5 -Compress)" }
             $invalidScreen = $screen | ConvertTo-Json -Depth 50 | ConvertFrom-Json
