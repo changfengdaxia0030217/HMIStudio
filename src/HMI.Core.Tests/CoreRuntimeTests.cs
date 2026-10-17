@@ -222,6 +222,40 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
+    public async Task InternalChangeConsumersReceiveOnlyChangesAndCanUnregisterSafely()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "temperature", Name = "Temperature", InitialValue = 21, CycleMs = 20 }
+        });
+
+        var firstConsumerEvents = new List<VariableValuePackage>();
+        var secondConsumerEvents = new List<VariableValuePackage>();
+        using var first = pool.RegisterInternalChangeConsumer(firstConsumerEvents.Add);
+        using var broken = pool.RegisterInternalChangeConsumer(_ => throw new InvalidOperationException("internal consumer failed"));
+        using var second = pool.RegisterInternalChangeConsumer(secondConsumerEvents.Add);
+
+        Assert.True((await pool.WriteAsync("temperature", 21)).Ok);
+        Assert.Empty(firstConsumerEvents);
+        Assert.Empty(secondConsumerEvents);
+
+        Assert.True((await pool.WriteAsync("temperature", 22)).Ok);
+        Assert.Single(firstConsumerEvents);
+        Assert.Single(secondConsumerEvents);
+        Assert.Equal(22, secondConsumerEvents[0].Value);
+
+        first.Dispose();
+        Assert.True((await pool.WriteAsync("temperature", 23)).Ok);
+        Assert.Single(firstConsumerEvents);
+        Assert.Equal(new object?[] { 22, 23 }, secondConsumerEvents.Select(item => item.Value));
+
+        pool.SetQuality("temperature", VariableQuality.BadComm);
+        Assert.Equal(3, secondConsumerEvents.Count);
+        Assert.Equal(VariableQuality.BadComm, secondConsumerEvents[^1].Quality);
+    }
+
+    [Fact]
     public async Task PermanentVariableRemainsPolledAfterSubscriptionIsReleased()
     {
         await using var pool = new MemoryVariablePool();
