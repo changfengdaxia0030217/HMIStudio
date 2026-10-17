@@ -6,7 +6,7 @@ using HMI.Core.Services;
 namespace HMI.Server;
 
 /// <summary>
-/// Persistent, one-second trend sampling for the first-release runtime.
+/// Persistent, one-second trend sampling for the first-release runtime, with a seven-day retention window.
 /// Each sample captures value, quality and UTC timestamp in a dedicated SQLite database.
 /// </summary>
 public sealed class TrendHistoryService : IAsyncDisposable
@@ -149,7 +149,7 @@ public sealed class TrendHistoryService : IAsyncDisposable
 
     private async Task SampleOnceAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -181,7 +181,7 @@ public sealed class TrendHistoryService : IAsyncDisposable
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM TrendSamples WHERE SampledAtUtc < $cutoff;";
-        command.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-30).ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$cutoff", DateTime.UtcNow.AddDays(-7).ToString("O", CultureInfo.InvariantCulture));
         var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
         if (deleted > 0) _logger.LogInformation("趋势历史保留策略清理了 {DeletedCount} 条过期记录", deleted);
     }
