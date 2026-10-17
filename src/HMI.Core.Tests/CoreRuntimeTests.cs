@@ -1,6 +1,9 @@
 using HMI.Core.Interface;
 using HMI.Core.Model;
 using HMI.Core.Services;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace HMI.Core.Tests;
@@ -276,5 +279,56 @@ public sealed class CoreRuntimeTests
         var countAfterUnsubscribe = Volatile.Read(ref received);
         await Task.Delay(80);
         Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe);
+    }
+
+    [Fact]
+    public async Task RuntimeCanStartRepeatedlyAndReloadPersistedProjectAfterShutdown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"hmistudio-runtime-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var environment = new TestWebHostEnvironment(root);
+            await using var runtime = new HMI.Server.RuntimeProjectService(
+                environment,
+                NullLogger<HMI.Server.RuntimeProjectService>.Instance);
+
+            await runtime.StartAsync(CancellationToken.None);
+            var projectPath = runtime.ProjectPath;
+            Assert.True(File.Exists(projectPath));
+            var originalScreenIds = runtime.Project.Screens.Select(screen => screen.Id).ToArray();
+            var originalVariableIds = runtime.Project.Variables.Select(variable => variable.VarId).ToArray();
+
+            // Repeated host start notifications must not create duplicate runtime services.
+            await runtime.StartAsync(CancellationToken.None);
+            Assert.Equal(originalScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal(originalVariableIds, runtime.Project.Variables.Select(variable => variable.VarId));
+
+            await runtime.StopAsync(CancellationToken.None);
+            await runtime.DisposeAsync();
+
+            // A later start on the same service instance must load the saved project again.
+            await runtime.StartAsync(CancellationToken.None);
+            Assert.Equal(projectPath, runtime.ProjectPath);
+            Assert.Equal(originalScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
+            Assert.Equal(originalVariableIds, runtime.Project.Variables.Select(variable => variable.VarId));
+            Assert.Empty(await runtime.ValidateProjectAsync());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private sealed class TestWebHostEnvironment(string contentRootPath) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = typeof(TestWebHostEnvironment).Assembly.FullName!;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = Path.Combine(contentRootPath, "wwwroot");
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ContentRootPath { get; set; } = contentRootPath;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
