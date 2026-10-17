@@ -313,6 +313,36 @@ public sealed class AlarmManagerTests
         }
     }
 
+    [Fact]
+    public async Task RemovedRuleClosesPersistedActiveAlarmOnRestart()
+    {
+        var directory = CreateTempDirectory();
+        var databasePath = Path.Combine(directory, "alarms.sqlite");
+        try
+        {
+            await using var pool = CreatePool();
+            await using (var first = await AlarmManager.CreateAsync(pool, CreateRules(), databasePath))
+            {
+                Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+                await WaitForHistoryCountAsync(first, 1);
+                Assert.Single(await first.GetActiveAsync());
+            }
+
+            await using (var restarted = await AlarmManager.CreateAsync(pool, [], databasePath))
+            {
+                Assert.Empty(await restarted.GetActiveAsync());
+                var history = await restarted.GetHistoryAsync(10);
+                Assert.Equal(new[] { "Recovered", "Triggered" }, history.Select(item => item.EventType));
+                Assert.Equal(2, await restarted.GetHistoryCountAsync());
+                Assert.Equal(history[0].AlarmId, history[1].AlarmId);
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task AssertRulesRejectedAsync(params AlarmRule[] rules)
     {
         var directory = CreateTempDirectory();
