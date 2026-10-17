@@ -110,7 +110,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
         </div>
         <div className="alarm-page-actions">
           <button className="alarm-secondary-button" onClick={onBack}>返回运行总览</button>
-          <button className="alarm-secondary-button" onClick={() => { const query = new URLSearchParams({ limit: "1000", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}), ...(historyFromDate ? { fromDate: historyFromDate } : {}), ...(historyToDate ? { toDate: historyToDate } : {}) }); window.location.href = `${API}/api/alarms/history.csv?${query}`; }}><Download size={14} />导出当前筛选 CSV</button>
+          <button className="alarm-secondary-button" onClick={() => { const query = new URLSearchParams({ limit: "1000", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}), ...(historyFromDate ? { fromDate: historyFromDate } : {}), ...(historyToDate ? { toDate: historyToDate } : {}) }); window.location.href = `${API}/api/alarms/history.csv?${query}`; }}><Download size={14} />导出筛选结果（最多 1000 条）</button>
           <button className="alarm-secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw size={14} />{loading ? "刷新中…" : "刷新"}</button>
         </div>
       </div>
