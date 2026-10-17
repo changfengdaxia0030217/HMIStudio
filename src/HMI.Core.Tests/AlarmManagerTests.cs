@@ -119,6 +119,35 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task DisposedManagerUnsubscribesFromVariableChanges()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+
+            await alarms.DisposeAsync();
+
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+            await Task.Delay(150);
+
+            var history = await alarms.GetHistoryAsync(10);
+            Assert.Single(history);
+            Assert.Equal("Triggered", history[0].EventType);
+            Assert.Equal(1, await alarms.GetHistoryCountAsync());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task EnabledRuleWithUnknownVariableIsRejected()
     {
         var rule = CreateRules()[0];
