@@ -26,13 +26,13 @@ type TrendResponse = {
 
 function csvCell(value: string | null) {
   let safe = value ?? "";
-  if (/^[=+@\\-\\t\\r]/.test(safe)) safe = `\u0027${safe}`;
+  if (/^[=+@\-\t\r]/.test(safe)) safe = `\u0027${safe}`;
   return `"${safe.replace(/"/g, "\"\"")}"`;
 }
 
 function exportSamples(varId: string, samples: TrendSample[]) {
   const rows = [["sampledAtUtc", "varId", "value", "quality"], ...samples.map(sample => [sample.sampledAtUtc, sample.varId, sample.value, sample.quality])];
-  const csv = "\\uFEFF" + rows.map(row => row.map(csvCell).join(",")).join("\\r\\n");
+  const csv = "\uFEFF" + rows.map(row => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
