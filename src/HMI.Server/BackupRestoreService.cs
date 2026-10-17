@@ -135,7 +135,7 @@ public static class BackupRestoreService
         var dbExisted = File.Exists(alarmPath);
         if (projectExisted) File.Copy(projectPath, Path.Combine(rollback, "project.original"), true);
         if (dbExisted && hasDb) File.Copy(alarmPath, Path.Combine(rollback, "alarms.original"), true);
-        await File.WriteAllTextAsync(Path.Combine(rollback, "state.json"), JsonSerializer.Serialize(new { projectExisted, alarmDatabaseWasTouched = hasDb, dbExisted }), ct);
+        await WriteRollbackStateAsync(rollback, new { projectExisted, alarmDatabaseWasTouched = hasDb, dbExisted }, ct);
 
         try
         {
@@ -153,6 +153,23 @@ public static class BackupRestoreService
         // payload can safely be applied again on the next startup.
         Directory.Delete(rollback, true);
         Directory.Delete(pending, true);
+    }
+
+    private static async Task WriteRollbackStateAsync<T>(string rollback, T state, CancellationToken ct)
+    {
+        var statePath = Path.Combine(rollback, "state.json");
+        var tempPath = statePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, JsonSerializer.Serialize(state), ct);
+            File.Move(tempPath, statePath, true);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     private static async Task RestoreRollbackAsync(string rollback, string projectPath, string alarmPath, CancellationToken ct)
