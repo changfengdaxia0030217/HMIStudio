@@ -142,15 +142,17 @@ public static class BackupRestoreService
             Directory.CreateDirectory(Path.GetDirectoryName(projectPath)!);
             await ReplaceFileAsync(stagedProject, projectPath, ct);
             if (hasDb) await ReplaceFileAsync(stagedDb, alarmPath, ct);
-            // Keep the rollback journal until both replacements have completed.
-            Directory.Delete(pending, true);
-            Directory.Delete(rollback, true);
         }
         catch
         {
             await RestoreRollbackAsync(rollback, projectPath, alarmPath, CancellationToken.None);
             throw;
         }
+
+        // Remove the rollback journal first. If shutdown interrupts cleanup, the pending
+        // payload can safely be applied again on the next startup.
+        Directory.Delete(rollback, true);
+        Directory.Delete(pending, true);
     }
 
     private static async Task RestoreRollbackAsync(string rollback, string projectPath, string alarmPath, CancellationToken ct)
