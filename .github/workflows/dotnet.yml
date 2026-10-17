@@ -331,6 +331,14 @@ jobs:
             if ($restartEventTypes -notcontains "Triggered" -or $restartEventTypes -notcontains "Acknowledged" -or $restartEventTypes -notcontains "Recovered") { throw "Alarm history did not survive runtime restart" }
             # End-to-end restore test: stage a known-good snapshot, prove the live runtime is unchanged,
             # then restart and verify the snapshot was applied before the project is loaded.
+            $invalidRestorePath = Join-Path $env:RUNNER_TEMP "hmistudio-invalid-restore.zip"
+            Set-Content -Path $invalidRestorePath -Value "not a ZIP archive" -NoNewline
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/restore" -Method Post -Form @{ file = Get-Item $invalidRestorePath } -TimeoutSec 15 | Out-Null
+              throw "Restore endpoint accepted a non-ZIP upload"
+            } catch {
+              if ($_.Exception.Response.StatusCode -ne [System.Net.HttpStatusCode]::BadRequest) { throw }
+            }
             $restoreBackupPath = Join-Path $env:RUNNER_TEMP "hmistudio-restore-test.zip"
             Invoke-WebRequest "http://127.0.0.1:5081/api/backup" -OutFile $restoreBackupPath -TimeoutSec 15
             $restoreSnapshotScreen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
@@ -342,6 +350,12 @@ jobs:
             if (-not $alteredRestoreReceipt.ok) { throw "Could not prepare altered project for restore smoke test" }
             $stagedRestore = Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/restore" -Method Post -Form @{ file = Get-Item $restoreBackupPath } -TimeoutSec 15
             if (-not $stagedRestore.ok -or -not $stagedRestore.restartRequired) { throw "HMIStudio restore endpoint did not stage a valid backup" }
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/restore" -Method Post -Form @{ file = Get-Item $restoreBackupPath } -TimeoutSec 15 | Out-Null
+              throw "Restore endpoint accepted a second pending restore"
+            } catch {
+              if ($_.Exception.Response.StatusCode -ne [System.Net.HttpStatusCode]::BadRequest) { throw }
+            }
             $liveBeforeRestoreRestart = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             if ($liveBeforeRestoreRestart.title -ne "CI restore altered") { throw "Restore changed the live project before restart" }
             & taskkill /PID $server.Id /T /F | Out-Null
