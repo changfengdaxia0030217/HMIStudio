@@ -68,7 +68,8 @@ public sealed class TrendHistoryServiceTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            await trends.DisposeAsync();
+            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
         }
     }
 }
