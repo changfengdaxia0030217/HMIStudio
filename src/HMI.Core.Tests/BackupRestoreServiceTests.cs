@@ -76,6 +76,41 @@ public sealed class BackupRestoreServiceTests
         }
     }
 
+    [Fact]
+    public async Task StageCancellationCleansTemporaryDirectoryAndPropagatesCancellation()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            await using var upload = new MemoryStream();
+            using (var archive = new ZipArchive(upload, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var manifest = archive.CreateEntry("manifest.json");
+                await using (var writer = new StreamWriter(manifest.Open()))
+                    await writer.WriteAsync("{}");
+
+                var project = archive.CreateEntry("project/test.hmijob");
+                await using (var writer = new StreamWriter(project.Open()))
+                    await writer.WriteAsync("{}");
+            }
+
+            upload.Position = 0;
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                BackupRestoreService.StageAsync(upload, upload.Length, root, cts.Token));
+
+            var dataDirectory = Path.Combine(root, "data");
+            Assert.True(Directory.Exists(dataDirectory));
+            Assert.Empty(Directory.GetFileSystemEntries(dataDirectory));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "HMIStudio.Tests", Guid.NewGuid().ToString("N"));
