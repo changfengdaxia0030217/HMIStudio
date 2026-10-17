@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using System.Threading.Channels;
@@ -385,6 +386,30 @@ app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, Cancellat
 
 app.MapGet("/api/alarms/history", async (int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct)));
+
+app.MapGet("/api/alarms/history.csv", async (int? limit, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct);
+    static string Csv(string? value) => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
+    var csv = new StringBuilder();
+    csv.AppendLine(string.Join(",", new[] { "Sequence", "AlarmId", "RuleId", "RuleName", "VarId", "EventType", "Message", "Value", "Quality", "OccurredAt" }.Select(Csv)));
+    foreach (var item in events)
+    {
+        csv.Append(item.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+            .Append(Csv(item.AlarmId)).Append(',')
+            .Append(Csv(item.RuleId)).Append(',')
+            .Append(Csv(item.RuleName)).Append(',')
+            .Append(Csv(item.VarId)).Append(',')
+            .Append(Csv(item.EventType)).Append(',')
+            .Append(Csv(item.Message)).Append(',')
+            .Append(Csv(item.Value)).Append(',')
+            .Append(Csv(item.Quality)).Append(',')
+            .Append(Csv(item.OccurredAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)))
+            .AppendLine();
+    }
+    var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
+    return Results.File(bytes, "text/csv; charset=utf-8", $"HMIStudio-alarm-history-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv");
+});
 
 app.MapPost("/api/alarms/{alarmId}/acknowledge", async (string alarmId, RuntimeProjectService runtime, CancellationToken ct) =>
 {

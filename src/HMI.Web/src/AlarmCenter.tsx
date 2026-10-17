@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, Clock3, RefreshCw, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, Clock3, Download, RefreshCw, ShieldAlert } from "lucide-react";
 
 const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
@@ -86,6 +86,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
         </div>
         <div className="alarm-page-actions">
           <button className="alarm-secondary-button" onClick={onBack}>返回运行总览</button>
+          <button className="alarm-secondary-button" onClick={() => { window.location.href = `${API}/api/alarms/history.csv?limit=1000`; }}><Download size={14} />导出历史 CSV</button>
           <button className="alarm-secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw size={14} />{loading ? "刷新中…" : "刷新"}</button>
         </div>
       </div>

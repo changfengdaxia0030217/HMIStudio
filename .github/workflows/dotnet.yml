@@ -329,6 +329,10 @@ jobs:
             $historyAfterRestart = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20" -TimeoutSec 5)
             $restartEventTypes = @($historyAfterRestart | ForEach-Object { $_.eventType })
             if ($restartEventTypes -notcontains "Triggered" -or $restartEventTypes -notcontains "Acknowledged" -or $restartEventTypes -notcontains "Recovered") { throw "Alarm history did not survive runtime restart" }
+            $alarmCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-alarm-history.csv"
+            Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000" -OutFile $alarmCsvPath -TimeoutSec 5
+            $alarmCsv = Get-Content -Path $alarmCsvPath -Raw
+            if ($alarmCsv -notmatch "Sequence,AlarmId,RuleId" -or $alarmCsv -notmatch "Triggered" -or $alarmCsv -notmatch "Acknowledged") { throw "Alarm history CSV export is incomplete" }
             # End-to-end restore test: stage a known-good snapshot, prove the live runtime is unchanged,
             # then restart and verify the snapshot was applied before the project is loaded.
             $invalidRestorePath = Join-Path $env:RUNNER_TEMP "hmistudio-invalid-restore.zip"
