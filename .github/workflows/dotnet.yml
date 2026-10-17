@@ -131,6 +131,23 @@ jobs:
               if ($_.Exception.Response.StatusCode.value__ -eq 400) { $mismatchedManifestRejected = $true }
             }
             if (-not $mismatchedManifestRejected) { throw "HMIStudio accepted a backup whose manifest disagrees with its files" }
+            $malformedVersionPath = Join-Path $env:RUNNER_TEMP "hmistudio-malformed-version.zip"
+            $malformedVersionArchive = [System.IO.Compression.ZipFile]::Open($malformedVersionPath, [System.IO.Compression.ZipArchiveMode]::Create)
+            try {
+              $manifestEntry = $malformedVersionArchive.CreateEntry("manifest.json")
+              $manifestWriter = [System.IO.StreamWriter]::new($manifestEntry.Open())
+              try { $manifestWriter.Write('{"product":"HMIStudio","backupFormatVersion":2147483648,"projectFile":"demo.hmijob","alarmHistoryIncluded":false}') } finally { $manifestWriter.Dispose() }
+              $projectEntry = $malformedVersionArchive.CreateEntry("project/demo.hmijob")
+              $projectWriter = [System.IO.StreamWriter]::new($projectEntry.Open())
+              try { $projectWriter.Write("{}") } finally { $projectWriter.Dispose() }
+            } finally { $malformedVersionArchive.Dispose() }
+            $malformedVersionRejected = $false
+            try {
+              Invoke-RestMethod -Uri "http://127.0.0.1:5081/api/backup/inspect" -Method Post -Form @{ file = Get-Item $malformedVersionPath } -TimeoutSec 10 | Out-Null
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 400) { $malformedVersionRejected = $true }
+            }
+            if (-not $malformedVersionRejected) { throw "HMIStudio did not reject an out-of-range backup format version with HTTP 400" }
             $projectSummary = Invoke-RestMethod "http://127.0.0.1:5081/api/project" -TimeoutSec 5
             $projectValidation = Invoke-RestMethod "http://127.0.0.1:5081/api/project/validate" -TimeoutSec 5
             if (-not $projectValidation.ok -or $projectValidation.errors.Count -gt 0) { throw "HMIStudio project validation failed: $($projectValidation.errors -join '; ')" }

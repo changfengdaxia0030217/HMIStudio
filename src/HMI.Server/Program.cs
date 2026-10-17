@@ -139,8 +139,13 @@ app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) 
         using var manifestStream = manifestEntry.Open();
         using var manifestDocument = await JsonDocument.ParseAsync(manifestStream, cancellationToken: ct);
         var manifest = manifestDocument.RootElement;
-        if (!manifest.TryGetProperty("product", out var product) || product.GetString() != "HMIStudio" ||
-            !manifest.TryGetProperty("backupFormatVersion", out var formatVersion) || formatVersion.GetInt32() != 1)
+        if (!manifest.TryGetProperty("product", out var product) ||
+            product.ValueKind != JsonValueKind.String ||
+            !string.Equals(product.GetString(), "HMIStudio", StringComparison.Ordinal) ||
+            !manifest.TryGetProperty("backupFormatVersion", out var formatVersion) ||
+            formatVersion.ValueKind != JsonValueKind.Number ||
+            !formatVersion.TryGetInt32(out var parsedFormatVersion) ||
+            parsedFormatVersion != 1)
             return (IResult)Results.BadRequest(new { ok = false, error = "不支持的 HMIStudio 备份格式" });
 
         var projectFileName = projectEntries[0].FullName["project/".Length..];
