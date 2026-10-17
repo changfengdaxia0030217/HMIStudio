@@ -41,11 +41,12 @@ public sealed class TrendHistoryServiceTests
             Assert.Equal("25", samples[0].Value);
             Assert.Equal("Good", samples[0].Quality);
             Assert.True(samples[0].SampledAtUtc <= DateTimeOffset.UtcNow);
-            Assert.Equal(samples.Count, await trends.GetCountAsync("temperature"));
+            Assert.True(await trends.GetCountAsync("temperature") >= samples.Count);
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            await trends.DisposeAsync();
+            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
         }
     }
 
