@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, RefreshCw, TrendingUp } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw, TrendingUp } from "lucide-react";
 
 const API = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
@@ -23,6 +23,25 @@ type TrendResponse = {
   limit: number;
   samples: TrendSample[];
 };
+
+function csvCell(value: string | null) {
+  let safe = value ?? "";
+  if (/^[=+@\\-\\t\\r]/.test(safe)) safe = `\u0027${safe}`;
+  return `"${safe.replace(/"/g, "\"\"")}"`;
+}
+
+function exportSamples(varId: string, samples: TrendSample[]) {
+  const rows = [["sampledAtUtc", "varId", "value", "quality"], ...samples.map(sample => [sample.sampledAtUtc, sample.varId, sample.value, sample.quality])];
+  const csv = "\\uFEFF" + rows.map(row => row.map(csvCell).join(",")).join("\\r\\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `HMIStudio-trend-${varId}-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -116,7 +135,7 @@ export default function TrendHistory({ onBack }: { onBack: () => void }) {
           <h1>变量趋势</h1>
           <p>查看最近一小时保存的变量历史样本。数据来自本地模拟运行时。</p>
         </div>
-        <button className="trend-refresh" disabled={loading} onClick={() => void loadTrend(selectedVarId)}><RefreshCw size={15} />{loading ? "查询中…" : "刷新趋势"}</button>
+        <div className="trend-heading-actions"><button className="trend-export" disabled={!samples.length || loading} onClick={() => exportSamples(selectedVarId, samples)}><Download size={15} />导出 CSV</button><button className="trend-refresh" disabled={loading} onClick={() => void loadTrend(selectedVarId)}><RefreshCw size={15} />{loading ? "查询中…" : "刷新趋势"}</button></div>
       </header>
 
       <section className="trend-summary">
@@ -154,7 +173,7 @@ export default function TrendHistory({ onBack }: { onBack: () => void }) {
         ) : (
           <div className="trend-empty"><TrendingUp size={30} /><strong>{loading ? "正在读取趋势数据…" : "暂无数值趋势数据"}</strong><span>运行一段时间后刷新。布尔值或文本变量暂不绘制数值曲线。</span></div>
         )}
-        <footer className="trend-chart-footer"><span>数据库：trends.sqlite</span><span>最多查询 3600 个样本</span><span>历史记录自动保留 7 天</span></footer>
+        <footer className="trend-chart-footer"><span>数据库：trends.sqlite</span><span>导出当前查询的样本（最多 3600 条）</span><span>历史记录自动保留 7 天</span></footer>
       </section>
     </div>
   );
