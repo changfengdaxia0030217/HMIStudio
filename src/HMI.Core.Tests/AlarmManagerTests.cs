@@ -348,7 +348,8 @@ public sealed class AlarmManagerTests
 
             var allHistory = await alarms.GetHistoryAsync(10);
             Assert.Equal(3, allHistory.Count);
-            var date = allHistory[0].OccurredAt.ToString("yyyy-MM-dd");
+            var fromDate = allHistory.Min(item => item.OccurredAt).ToString("yyyy-MM-dd");
+            var toDate = allHistory.Max(item => item.OccurredAt).ToString("yyyy-MM-dd");
 
             var triggered = await alarms.GetHistoryAsync(10, eventType: "Triggered");
             Assert.Single(triggered);
@@ -359,10 +360,10 @@ public sealed class AlarmManagerTests
             Assert.Equal(matchingMessage.Count,
                 await alarms.GetHistoryCountAsync(search: "temperature exceeds limit"));
 
-            var sameDay = await alarms.GetHistoryAsync(10, fromDate: date, toDate: date);
+            var sameDay = await alarms.GetHistoryAsync(10, fromDate: fromDate, toDate: toDate);
             Assert.Equal(3, sameDay.Count);
             Assert.Equal(sameDay.Count,
-                await alarms.GetHistoryCountAsync(fromDate: date, toDate: date));
+                await alarms.GetHistoryCountAsync(fromDate: fromDate, toDate: toDate));
 
             Assert.Empty(await alarms.GetHistoryAsync(10, eventType: "Missing"));
             Assert.Equal(0, await alarms.GetHistoryCountAsync(eventType: "Missing"));
