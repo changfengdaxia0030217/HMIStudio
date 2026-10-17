@@ -222,6 +222,34 @@ public sealed class AlarmManagerTests
         }
     }
 
+    [Fact]
+    public async Task RepeatedAcknowledgementIsIdempotentAndDoesNotDuplicateHistory()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+            var active = Assert.Single(await alarms.GetActiveAsync());
+
+            await alarms.AcknowledgeAsync(active.AlarmId);
+            await alarms.AcknowledgeAsync(active.AlarmId);
+
+            var history = await alarms.GetHistoryAsync(10);
+            Assert.Equal(2, history.Count);
+            Assert.Equal(new[] { "Acknowledged", "Triggered" }, history.Select(item => item.EventType));
+            Assert.True(Assert.Single(await alarms.GetActiveAsync()).Acknowledged);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task AssertRulesRejectedAsync(params AlarmRule[] rules)
     {
         var directory = CreateTempDirectory();
