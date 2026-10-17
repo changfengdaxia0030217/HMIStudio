@@ -289,14 +289,14 @@ jobs:
             $firstHistoryPage = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=0" -TimeoutSec 5)
             $zeroLimitHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=0&offset=0" -TimeoutSec 5)
             $negativeOffsetHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=-10" -TimeoutSec 5)
-            $maximumOffsetHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=2&offset=2147483647" -TimeoutSec 5)
+            $maximumOffsetPayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?limit=2&offset=2147483647" -TimeoutSec 5).Content.Trim()
             if ($firstHistoryPage.Count -ne 1 -or $zeroLimitHistory.Count -ne 1 -or $negativeOffsetHistory.Count -ne 1) {
               throw "Alarm history pagination did not normalize zero limit or negative offset to the documented boundaries"
             }
             if ($firstHistoryPage[0].sequence -ne $zeroLimitHistory[0].sequence -or $firstHistoryPage[0].sequence -ne $negativeOffsetHistory[0].sequence) {
               throw "Alarm history pagination boundary results differ from limit=1, offset=0"
             }
-            if ($maximumOffsetHistory.Count -ne 0) { throw "Alarm history returned records for the maximum integer offset" }
+            if ($maximumOffsetPayload -ne "[]") { throw "Alarm history returned unexpected JSON for the maximum integer offset: $maximumOffsetPayload" }
             $acknowledgedHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?eventType=Acknowledged&limit=10" -TimeoutSec 5)
             $acknowledgedCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Acknowledged" -TimeoutSec 5
             if ($acknowledgedHistory.Count -ne [int]$acknowledgedCount) { throw "Filtered alarm history records and count disagree for eventType=Acknowledged" }
