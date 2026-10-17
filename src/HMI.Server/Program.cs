@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using System.Threading.Channels;
 using HMI.Core.Interface;
 using HMI.Core.Model;
@@ -29,6 +31,73 @@ app.MapGet("/api/health", (RuntimeProjectService runtime) => Results.Ok(new
 }));
 
 app.MapGet("/api/project", (RuntimeProjectService runtime) => Results.Ok(runtime.GetProjectSummary()));
+
+app.MapGet("/api/backup", async (RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    var temporaryDatabase = Path.Combine(Path.GetTempPath(), $"hmistudio-backup-{Guid.NewGuid():N}.sqlite");
+    try
+    {
+        await using var output = new MemoryStream();
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var projectEntry = archive.CreateEntry($"project/{Path.GetFileName(runtime.ProjectPath)}", CompressionLevel.Optimal);
+            await using (var entryStream = projectEntry.Open())
+            await using (var projectStream = new FileStream(runtime.ProjectPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 81920, useAsync: true))
+                await projectStream.CopyToAsync(entryStream, ct);
+
+            var alarmHistoryIncluded = false;
+            if (File.Exists(runtime.AlarmDatabasePath))
+            {
+                await using (var source = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = runtime.AlarmDatabasePath,
+                    Mode = SqliteOpenMode.ReadOnly,
+                    Pooling = false
+                }.ToString()))
+                await using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = temporaryDatabase,
+                    Pooling = false
+                }.ToString()))
+                {
+                    await source.OpenAsync(ct);
+                    await destination.OpenAsync(ct);
+                    source.BackupDatabase(destination);
+                }
+
+                var alarmEntry = archive.CreateEntry("data/alarms.sqlite", CompressionLevel.Optimal);
+                await using var entryStream = alarmEntry.Open();
+                await using var databaseStream = new FileStream(temporaryDatabase, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                await databaseStream.CopyToAsync(entryStream, ct);
+                alarmHistoryIncluded = true;
+            }
+
+            var manifest = new
+            {
+                product = "HMIStudio",
+                backupFormatVersion = 1,
+                createdAtUtc = DateTimeOffset.UtcNow,
+                projectFile = Path.GetFileName(runtime.ProjectPath),
+                alarmHistoryIncluded
+            };
+            var manifestEntry = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
+            await using (var manifestStream = manifestEntry.Open())
+                await JsonSerializer.SerializeAsync(manifestStream, manifest, HmiJson.Options, ct);
+        }
+
+        return Results.File(output.ToArray(), "application/zip", $"HMIStudio-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip");
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SqliteException or InvalidDataException)
+    {
+        return Results.Problem(title: "创建工程备份失败", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    }
+    finally
+    {
+        try { if (File.Exists(temporaryDatabase)) File.Delete(temporaryDatabase); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+});
 app.MapGet("/api/project/validate", async (RuntimeProjectService runtime, CancellationToken ct) =>
 {
     try
