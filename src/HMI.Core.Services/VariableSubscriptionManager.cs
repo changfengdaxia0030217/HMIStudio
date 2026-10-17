@@ -124,6 +124,26 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
         {
             group.Cts?.Cancel();
         }
+
+        // The group has been removed from _groups, so dispose its linked CTS after
+        // the worker exits instead of leaving its cancellation registration behind.
+        _ = DisposeInactiveGroupAsync(group);
+    }
+
+    private static async Task DisposeInactiveGroupAsync(PollGroup group)
+    {
+        var loop = group.Loop;
+        if (loop is not null)
+        {
+            try { await loop.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+        }
+
+        lock (group)
+        {
+            group.Cts?.Dispose();
+            group.Cts = null;
+        }
     }
 
     private async Task RunGroupAsync(PollGroup group)
