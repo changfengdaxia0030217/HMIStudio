@@ -17,5 +17,6 @@
   <ItemGroup>
     <ProjectReference Include="..\HMI.Core.Model\HMI.Core.Model.csproj" />
     <ProjectReference Include="..\HMI.Core.Services\HMI.Core.Services.csproj" />
+    <ProjectReference Include="..\HMI.Server\HMI.Server.csproj" />
   </ItemGroup>
 </Project>
