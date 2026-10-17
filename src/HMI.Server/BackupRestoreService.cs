@@ -191,10 +191,20 @@ public static class BackupRestoreService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         var tempTarget = target + ".restore-" + Guid.NewGuid().ToString("N");
-        await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true))
-        await using (var output = new FileStream(tempTarget, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
-            await input.CopyToAsync(output, ct);
-        File.Move(tempTarget, target, true);
+        try
+        {
+            await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true))
+            await using (var output = new FileStream(tempTarget, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                await input.CopyToAsync(output, ct);
+            File.Move(tempTarget, target, true);
+        }
+        finally
+        {
+            // Cancellation or an I/O failure must not leave partial restore files beside live data.
+            try { if (File.Exists(tempTarget)) File.Delete(tempTarget); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     private static async Task<(bool Ok, string Message)> ValidateAlarmDatabaseAsync(string path, CancellationToken ct)
