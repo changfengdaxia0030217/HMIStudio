@@ -412,14 +412,14 @@ app.MapGet("/api/trends", async (string? varId, string? from, string? to, int? l
     if (!string.IsNullOrWhiteSpace(from))
     {
         if (!DateTimeOffset.TryParse(from, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.RoundtripKind, out var parsedFrom))
+                System.Globalization.DateTimeStyles.None, out var parsedFrom))
             return (IResult)Results.BadRequest(new { error = "from 必须是有效的 ISO 8601 时间" });
         fromTime = parsedFrom;
     }
     if (!string.IsNullOrWhiteSpace(to))
     {
         if (!DateTimeOffset.TryParse(to, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTo))
+                System.Globalization.DateTimeStyles.None, out var parsedTo))
             return (IResult)Results.BadRequest(new { error = "to 必须是有效的 ISO 8601 时间" });
         toTime = parsedTo;
     }
