@@ -17,6 +17,8 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
     private readonly ConcurrentDictionary<int, List<Action<VariableValuePackage>>> _consumers = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
+    private readonly object _disposeLock = new();
+    private Task? _disposeTask;
     private readonly Action<Exception>? _consumerError;
     private bool _disposed;
 
@@ -159,7 +161,9 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
             {
                 // A bad value or unexpected pool error must not permanently kill this polling group.
                 try { _consumerError?.Invoke(ex); } catch { /* diagnostics are isolated too */ }
-                await Task.Yield();
+                // Avoid a tight retry loop if a driver or pool repeatedly fails.
+                try { await Task.Delay(100, token).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
             }
         }
     }
@@ -207,12 +211,20 @@ public sealed class VariableSubscriptionManager : IVariableSubscribeManager, IAs
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        lock (_disposeLock)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_disposed) return;
             _disposed = true;
             _cts.Cancel();
             foreach (var group in _groups.Values)
