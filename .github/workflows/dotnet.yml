@@ -270,10 +270,14 @@ jobs:
             if ($firstHistoryPage.Count -ne 1 -or $secondHistoryPage.Count -ne 1 -or $firstHistoryPage[0].sequence -eq $secondHistoryPage[0].sequence) { throw "Alarm history offset pagination did not return distinct records" }
             $filteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Triggered&search=target-speed-high" -TimeoutSec 5
             if ([int]$filteredCount -lt 1) { throw "Alarm history count did not respect the selected filters" }
-            $historyDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
-            $dateFilteredHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20&fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5)
+            $historyPayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?limit=20" -TimeoutSec 5).Content
+            $historyDateMatch = [regex]::Match($historyPayload, '"occurredAt"\s*:\s*"(?<date>\d{4}-\d{2}-\d{2})')
+            if (-not $historyDateMatch.Success) { throw "Alarm history did not include an occurredAt date for range testing" }
+            $historyDate = $historyDateMatch.Groups["date"].Value
+            $dateFilteredPayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?limit=20&fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5).Content
+            $dateFilteredHistory = @(ConvertFrom-Json -InputObject $dateFilteredPayload)
             $dateFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5
-            if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results and count do not agree for $historyDate" }
+            if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results ($($dateFilteredHistory.Count)) and count ($dateFilteredCount) do not agree for $historyDate" }
             $futureHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5)
             $futureCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5
             if ($futureHistory.Count -ne 0 -or [int]$futureCount -ne 0) { throw "Alarm history future date range should return no records" }
