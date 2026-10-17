@@ -270,7 +270,7 @@ jobs:
             if ($firstHistoryPage.Count -ne 1 -or $secondHistoryPage.Count -ne 1 -or $firstHistoryPage[0].sequence -eq $secondHistoryPage[0].sequence) { throw "Alarm history offset pagination did not return distinct records" }
             $filteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Triggered&search=target-speed-high" -TimeoutSec 5
             if ([int]$filteredCount -lt 1) { throw "Alarm history count did not respect the selected filters" }
-            $historyDate = ([DateTimeOffset]$alarmHistory[0].occurredAt).UtcDateTime.ToString("yyyy-MM-dd")
+            $historyDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
             $dateFilteredHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20&fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5)
             $dateFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5
             if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results and count do not agree for $historyDate" }
