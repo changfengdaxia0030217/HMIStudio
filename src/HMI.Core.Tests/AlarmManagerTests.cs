@@ -280,6 +280,39 @@ public sealed class AlarmManagerTests
         }
     }
 
+    [Fact]
+    public async Task CancelledAcknowledgementDoesNotChangeAlarmStateOrHistory()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+            var active = Assert.Single(await alarms.GetActiveAsync());
+
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                alarms.AcknowledgeAsync(active.AlarmId, cancellation.Token));
+
+            var stillActive = Assert.Single(await alarms.GetActiveAsync());
+            Assert.False(stillActive.Acknowledged);
+            Assert.Null(stillActive.AcknowledgedAt);
+            var history = await alarms.GetHistoryAsync(10);
+            Assert.Single(history);
+            Assert.Equal("Triggered", history[0].EventType);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task AssertRulesRejectedAsync(params AlarmRule[] rules)
     {
         var directory = CreateTempDirectory();
