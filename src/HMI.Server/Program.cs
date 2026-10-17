@@ -99,6 +99,14 @@ app.MapGet("/api/backup", async (RuntimeProjectService runtime, CancellationToke
         catch (UnauthorizedAccessException) { }
     }
 });
+app.MapPost("/api/backup/restore", async (IFormFile file, IWebHostEnvironment environment, CancellationToken ct) =>
+{
+    await using var stream = file.OpenReadStream();
+    var result = await BackupRestoreService.StageAsync(stream, file.Length, environment.ContentRootPath, ct);
+    if (!result.Ok) return (IResult)Results.BadRequest(new { ok = false, error = result.Message });
+    return (IResult)Results.Ok(new { ok = true, restartRequired = true, message = result.Message });
+}).DisableAntiforgery();
+
 app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) =>
 {
     const long maxBackupBytes = 25L * 1024 * 1024;

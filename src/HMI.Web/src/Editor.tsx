@@ -111,7 +111,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [backupInspection, setBackupInspection] = useState<null | { ok: boolean; error?: string; projectValid?: boolean; projectErrors?: string[]; projectFile?: string; screenCount?: number; variableCount?: number; startScreenId?: string; alarmHistoryIncluded?: boolean; alarmDatabaseIntegrity?: string; alarmDatabaseSchemaValid?: boolean; message?: string }>(null);
-  const [inspectingBackup, setInspectingBackup] = useState(false);
+  const [inspectingBackup, setInspectingBackup] = useState(false);\n  const [restoringBackup, setRestoringBackup] = useState(false);
   const backupFileRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(1);
   const [hasClipboard, setHasClipboard] = useState(false);
@@ -284,6 +284,28 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const restoreBackupFile = async () => {
+    if (dirty) { setMessage("请先保存当前工程，再恢复备份。"); return; }
+    if (!window.confirm("恢复会在 HMIStudio 下次启动时替换当前工程文件；若备份包含报警历史，也会替换报警数据库。请确认已下载当前备份。是否继续选择备份文件？")) return;
+    const picker = document.createElement("input");
+    picker.type = "file"; picker.accept = ".zip,application/zip";
+    picker.onchange = () => { void (async () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      setRestoringBackup(true); setMessage("");
+      try {
+        const form = new FormData(); form.append("file", file);
+        const response = await fetch(`${API}/api/backup/restore`, { method: "POST", body: form });
+        const result = await response.json() as { ok?: boolean; error?: string; message?: string };
+        if (!response.ok || !result.ok) throw new Error(result.error ?? `HTTP ${response.status}`);
+        setMessage(result.message ?? "备份已暂存，请重启 HMIStudio 完成恢复。");
+        window.alert((result.message ?? "备份已暂存。") + "\\n\\n请先关闭 HMIStudio，再重新启动。恢复只会在启动阶段应用。");
+      } catch (error) { setMessage(error instanceof Error ? error.message : "恢复备份失败"); }
+      finally { setRestoringBackup(false); }
+    })(); };
+    picker.click();
+  };
+
   const validateProject = async () => {
     if (dirty) {
       setMessage("请先保存当前画面，再校验工程。");
@@ -379,7 +401,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
     <header className="editor-topbar">
       <button className="editor-back" onClick={() => { if (saving) return; if (dirty && !window.confirm("当前画面有未保存的修改。确定放弃修改并返回运行监控吗？")) return; onBack(); }}><ArrowLeft size={16} />返回运行监控</button>
       <div className="editor-project"><strong>HMIStudio</strong><span>/ 画面组态编辑器</span><i className={dirty ? "dirty-dot" : ""} />{dirty ? "未保存" : "已同步"}</div>
-      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("left")} title="多选控件左对齐">左对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("top")} title="多选控件顶对齐">顶对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-x")} title="多选控件水平中心对齐">水平居中</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-y")} title="多选控件垂直中心对齐">垂直居中</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-ghost" disabled={saving || loading || dirty} onClick={() => { window.location.href = `${API}/api/backup`; }} title={dirty ? "请先保存修改，再下载备份" : "下载工程 JSON 与 SQLite 报警历史备份"}><Download size={15} />下载备份</button><button className="editor-ghost" disabled={saving || loading || inspectingBackup} onClick={() => backupFileRef.current?.click()} title="选择备份 ZIP，检查工程与报警数据库；不会覆盖当前工程"><FileCheck size={15} />校验备份</button><input ref={backupFileRef} type="file" accept=".zip,application/zip" hidden onChange={event => void inspectBackupFile(event.target.files?.[0])} /><button className="editor-ghost" disabled={saving || loading || dirty} onClick={() => void validateProject()} title={dirty ? "请先保存修改再校验" : "检查工程 JSON 结构"}><ShieldCheck size={15} />校验工程</button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
+      <div className="editor-actions"><button className="editor-ghost" disabled={!historyRef.current.past.length} onClick={undo} title="撤销 Ctrl+Z">↶</button><button className="editor-ghost" disabled={!historyRef.current.future.length} onClick={redo} title="重做 Ctrl+Y">↷</button><button className="editor-ghost" disabled={!selected} onClick={copySelected} title="复制 Ctrl+C">复制</button><button className="editor-ghost" disabled={!hasClipboard} onClick={pasteControl} title="粘贴 Ctrl+V">粘贴</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("left")} title="多选控件左对齐">左对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("top")} title="多选控件顶对齐">顶对齐</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-x")} title="多选控件水平中心对齐">水平居中</button><button className="editor-ghost" disabled={selectedIds.length < 2} onClick={() => alignSelected("center-y")} title="多选控件垂直中心对齐">垂直居中</button><button className="editor-ghost" onClick={() => setZoom(z => Math.max(.5, +(z - .1).toFixed(1)))} title="缩小"><ZoomOut size={15} /></button><span>{Math.round(zoom * 100)}%</span><button className="editor-ghost" onClick={() => setZoom(z => Math.min(1.5, +(z + .1).toFixed(1)))} title="放大"><ZoomIn size={15} /></button><button className="editor-ghost" disabled={saving || loading || dirty} onClick={() => { window.location.href = `${API}/api/backup`; }} title={dirty ? "请先保存修改，再下载备份" : "下载工程 JSON 与 SQLite 报警历史备份"}><Download size={15} />下载备份</button><button className="editor-ghost" disabled={saving || loading || inspectingBackup || restoringBackup} onClick={() => backupFileRef.current?.click()} title="选择备份 ZIP，检查工程与报警数据库；不会覆盖当前工程"><FileCheck size={15} />校验备份</button><button className="editor-ghost" disabled={saving || loading || inspectingBackup || restoringBackup || dirty} onClick={() => void restoreBackupFile()} title={dirty ? "请先保存当前工程" : "暂存已校验的备份，并在服务重启时应用恢复"}>恢复备份</button><input ref={backupFileRef} type="file" accept=".zip,application/zip" hidden onChange={event => void inspectBackupFile(event.target.files?.[0])} /><button className="editor-ghost" disabled={saving || loading || dirty} onClick={() => void validateProject()} title={dirty ? "请先保存修改再校验" : "检查工程 JSON 结构"}><ShieldCheck size={15} />校验工程</button><button className="editor-save" disabled={saving || loading || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中" : "保存工程"}</button></div>
     </header>
     <div className="editor-workspace">
       <aside className="editor-library">
