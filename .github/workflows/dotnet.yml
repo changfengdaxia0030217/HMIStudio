@@ -227,6 +227,13 @@ jobs:
             if (-not $writeReceipt.ok) { throw "HMIStudio variable write API returned failure" }
             $writtenVariable = Invoke-RestMethod "http://127.0.0.1:5081/api/variables/line.targetSpeed" -TimeoutSec 5
             if ([double]$writtenVariable.value -ne 61.5) { throw "HMIStudio variable write did not update the live value" }
+            Start-Sleep -Seconds 2
+            $trendVariables = @(Invoke-RestMethod "http://127.0.0.1:5081/api/trends/variables" -TimeoutSec 5)
+            if (-not ($trendVariables | Where-Object { $_.varId -eq "line.targetSpeed" })) { throw "Trend variable discovery omitted line.targetSpeed" }
+            $trendHistory = Invoke-RestMethod "http://127.0.0.1:5081/api/trends?varId=line.targetSpeed&limit=10" -TimeoutSec 5
+            if ($trendHistory.count -lt 1 -or -not ($trendHistory.samples | Where-Object { $_.varId -eq "line.targetSpeed" })) { throw "Trend history API did not return samples for line.targetSpeed" }
+            $trendCount = Invoke-RestMethod "http://127.0.0.1:5081/api/trends/count?varId=line.targetSpeed" -TimeoutSec 5
+            if ($trendCount.count -lt 1) { throw "Trend history count API did not report saved samples" }
             $screen = Invoke-RestMethod "http://127.0.0.1:5081/api/screens/main" -TimeoutSec 5
             if ($screen.controls.Count -lt 8) { throw "Demo screen is missing interactive simulator controls" }
             $runToggle = $screen.controls | Where-Object { $_.id -eq "run-toggle" } | Select-Object -First 1
