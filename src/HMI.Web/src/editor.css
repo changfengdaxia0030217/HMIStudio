@@ -8,3 +8,11 @@
 .editor-canvas-toolbar .editor-delete-screen{display:inline-flex;align-items:center;gap:5px;border:1px solid #604047;border-radius:5px;background:#34232b;color:#f1a5ac;padding:5px 8px;font-size:10px;cursor:pointer}.editor-canvas-toolbar .editor-delete-screen:hover:not(:disabled){background:#482b34}.editor-canvas-toolbar .editor-delete-screen:disabled{opacity:.4;cursor:not-allowed}
 
 .screen-inspector-title{display:flex;align-items:center;justify-content:space-between;margin:4px 0 14px;color:#dce7f5;font-size:12px}.screen-inspector-title small{font-size:9px;color:#70849f;font-weight:400}.editor-inspector .editor-color-row>span{font-size:10px;color:#8ea2bb;font-family:monospace}
+
+.backup-inspection-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(3,8,18,.72);backdrop-filter:blur(4px)}
+.backup-inspection-dialog{width:min(520px,100%);max-height:min(80vh,720px);overflow:auto;border:1px solid #33445e;border-radius:12px;background:#101a2b;color:#dce7f5;box-shadow:0 24px 80px rgba(0,0,0,.45);padding:20px}
+.backup-inspection-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.backup-inspection-dialog>header>div{display:grid;gap:5px}.backup-inspection-dialog>header strong{font-size:15px}.backup-inspection-dialog>header small{font-size:11px;color:#91a4bd}
+.backup-inspection-status{display:inline-flex;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700}.backup-inspection-status.success{background:#15382f;color:#8de1bd}.backup-inspection-status.failure{background:#41252d;color:#ffabb5}
+.backup-inspection-dialog dl{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px 14px;margin:18px 0;font-size:12px}.backup-inspection-dialog dt{color:#91a4bd}.backup-inspection-dialog dd{margin:0;overflow-wrap:anywhere;color:#e0eaf7}
+.backup-inspection-dialog ul{padding-left:20px;color:#ffb4bb;font-size:12px}.backup-inspection-dialog li{margin:6px 0}.backup-inspection-error{color:#ffb4bb;font-size:12px;overflow-wrap:anywhere}.backup-inspection-note{padding-top:12px;border-top:1px solid #28374e;color:#91a4bd;font-size:11px;line-height:1.6}
