@@ -329,6 +329,51 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task HistoryFiltersAndCountsRemainConsistent()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+            var alarmId = Assert.Single(await alarms.GetActiveAsync()).AlarmId;
+            await alarms.AcknowledgeAsync(alarmId);
+
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 3);
+
+            var allHistory = await alarms.GetHistoryAsync(10);
+            Assert.Equal(3, allHistory.Count);
+            var date = allHistory[0].OccurredAt.ToString("yyyy-MM-dd");
+
+            var triggered = await alarms.GetHistoryAsync(10, eventType: "Triggered");
+            Assert.Single(triggered);
+            Assert.Equal(1, await alarms.GetHistoryCountAsync(eventType: "Triggered"));
+
+            var matchingMessage = await alarms.GetHistoryAsync(10, search: "temperature exceeds limit");
+            Assert.Equal(3, matchingMessage.Count);
+            Assert.Equal(matchingMessage.Count,
+                await alarms.GetHistoryCountAsync(search: "temperature exceeds limit"));
+
+            var sameDay = await alarms.GetHistoryAsync(10, fromDate: date, toDate: date);
+            Assert.Equal(3, sameDay.Count);
+            Assert.Equal(sameDay.Count,
+                await alarms.GetHistoryCountAsync(fromDate: date, toDate: date));
+
+            Assert.Empty(await alarms.GetHistoryAsync(10, eventType: "Missing"));
+            Assert.Equal(0, await alarms.GetHistoryCountAsync(eventType: "Missing"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AcknowledgingUnknownAlarmFailsExplicitly()
     {
         var directory = CreateTempDirectory();
