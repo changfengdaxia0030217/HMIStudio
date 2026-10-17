@@ -417,7 +417,7 @@ app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, stri
     if (!IsValidAlarmDateRange(fromDate, toDate))
         return (IResult)Results.BadRequest(new { error = "日期格式必须为 yyyy-MM-dd，且开始日期不能晚于结束日期。" });
     var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct, eventType, search, 0, fromDate, toDate);
-    static string Csv(string? value) => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
+    static string Csv(string? value) => CsvSafety.EscapeField(value);
     var csv = new StringBuilder();
     csv.AppendLine(string.Join(",", new[] { "Sequence", "AlarmId", "RuleId", "RuleName", "VarId", "EventType", "Message", "Value", "Quality", "OccurredAt" }.Select(Csv)));
     foreach (var item in events)
