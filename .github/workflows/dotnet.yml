@@ -277,6 +277,16 @@ jobs:
             if ($firstHistoryPage.Count -ne 1 -or $secondHistoryPage.Count -ne 1 -or $firstHistoryPage[0].sequence -eq $secondHistoryPage[0].sequence) { throw "Alarm history offset pagination did not return distinct records" }
             $filteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Triggered&search=target-speed-high" -TimeoutSec 5
             if ([int]$filteredCount -lt 1) { throw "Alarm history count did not respect the selected filters" }
+            # Filter normalization must be identical across list and count endpoints.
+            $normalizedFilterQuery = "eventType=%20tRiGgErEd%20&search=%20TARGET-SPEED-HIGH%20"
+            $normalizedFilteredHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=100&$normalizedFilterQuery" -TimeoutSec 5)
+            $normalizedFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?$normalizedFilterQuery" -TimeoutSec 5
+            if ($normalizedFilteredHistory.Count -lt 1 -or [int]$normalizedFilteredCount -ne $normalizedFilteredHistory.Count) {
+              throw "Alarm history list and count disagree after case/whitespace normalization (list: $($normalizedFilteredHistory.Count); count: $normalizedFilteredCount)"
+            }
+            if (@($normalizedFilteredHistory | Where-Object { $_.eventType -ne "Triggered" -or $_.ruleId -ne "target-speed-high" }).Count -gt 0) {
+              throw "Alarm history filter normalization returned records outside the selected event type and rule"
+            }
             $historyPayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?limit=20" -TimeoutSec 5).Content
             $historyDateMatch = [regex]::Match($historyPayload, '"occurredAt"\s*:\s*"(?<date>\d{4}-\d{2}-\d{2})')
             if (-not $historyDateMatch.Success) { throw "Alarm history did not include an occurredAt date for range testing" }
