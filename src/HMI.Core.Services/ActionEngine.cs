@@ -71,6 +71,13 @@ public sealed class ActionEngine : IActionEngine
             {
                 await ExecuteNodeAsync(node, context, nodeCt);
             }
+            // Caller cancellation is a control-flow signal, not a node failure. A linked
+            // timeout token is also cancelled when the caller cancels, so distinguish the
+            // caller token first to avoid swallowing shutdown/request cancellation.
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (OperationCanceledException) when (timeoutCts?.IsCancellationRequested == true)
             {
                 await _log.LogAsync("WARN", $"动作节点超时: {node.ActionType}");
@@ -94,12 +101,14 @@ public sealed class ActionEngine : IActionEngine
         _ => _log.LogAsync("WARN", $"未注册动作类型: {node.ActionType}"),
     };
 
-    private Task WriteVariableAsync(ActionNode node, ActionContext context, CancellationToken ct)
+    private async Task WriteVariableAsync(ActionNode node, ActionContext context, CancellationToken ct)
     {
         var varId = GetStr(node.Parameters, "VarId");
         var value = GetVal(node.Parameters, "Value");
-        if (string.IsNullOrWhiteSpace(varId)) return Task.CompletedTask;
-        return context.VariablePool.WriteAsync(varId, value, ct);
+        if (string.IsNullOrWhiteSpace(varId)) return;
+        var result = await context.VariablePool.WriteAsync(varId, value, ct, WriteSource.Action);
+        if (!result.Ok)
+            await _log.LogAsync("WARN", $"变量写入失败: {varId}; reason={result.Reason}; requestId={result.RequestId}; {result.Message}");
     }
 
     private async Task SetBooleanAsync(ActionNode node, ActionContext context, CancellationToken ct)
@@ -107,7 +116,9 @@ public sealed class ActionEngine : IActionEngine
         var varId = GetStr(node.Parameters, "VarId");
         var enabled = GetBool(node.Parameters, "Enable") ?? false;
         if (string.IsNullOrWhiteSpace(varId)) return;
-        await context.VariablePool.WriteAsync(varId, enabled, ct);
+        var result = await context.VariablePool.WriteAsync(varId, enabled, ct, WriteSource.Action);
+        if (!result.Ok)
+            await _log.LogAsync("WARN", $"变量写入失败: {varId}; reason={result.Reason}; requestId={result.RequestId}; {result.Message}");
     }
 
     private Task NavigateScreenAsync(ActionNode node, CancellationToken ct)

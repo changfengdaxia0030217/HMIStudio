@@ -12,7 +12,7 @@ namespace HMI.Core.Services;
 /// IVariableSubscribeManager.RegisterPollingConsumer。服务端内部如需"值一变就反应"的边沿触发，
 /// 须另建内部通道，勿恢复本类广播。
 /// </summary>
-public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
+public sealed class MemoryVariablePool : IVariablePool, IVariableMetadataProvider, IAsyncDisposable
 {
     /// <summary>变量槽：可变（写时真正落值），内置细粒度锁对象（§3.6）。</summary>
     private sealed class Slot
@@ -24,19 +24,67 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
 
     private readonly ConcurrentDictionary<string, Slot> _slots = new();
     private readonly ConcurrentDictionary<string, VariableMeta> _metas = new();
+    private readonly ConcurrentDictionary<Guid, Action<VariableValuePackage>> _internalConsumers = new();
+
+    private sealed class InternalConsumerLease : IDisposable
+    {
+        private readonly ConcurrentDictionary<Guid, Action<VariableValuePackage>> _consumers;
+        private readonly Guid _id;
+        public InternalConsumerLease(ConcurrentDictionary<Guid, Action<VariableValuePackage>> consumers, Guid id)
+        {
+            _consumers = consumers;
+            _id = id;
+        }
+        public void Dispose() => _consumers.TryRemove(_id, out _);
+    }
+
+    /// <summary>
+    /// 注册服务端内部变量变化消费者，与 UI 轮询订阅完全分离。
+    /// 仅当变量值或质量实际变化时通知。
+    /// </summary>
+    public IDisposable RegisterInternalChangeConsumer(Action<VariableValuePackage> consumer)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        var id = Guid.NewGuid();
+        _internalConsumers[id] = consumer;
+        return new InternalConsumerLease(_internalConsumers, id);
+    }
+
+    private void PublishInternalChange(string varId, Slot slot)
+    {
+        VariableValuePackage package;
+        lock (slot.Sync)
+        {
+            package = new VariableValuePackage
+            {
+                VarId = varId,
+                Value = slot.Value,
+                Quality = slot.Quality,
+                ServerTimestamp = DateTimeOffset.UtcNow
+            };
+        }
+
+        foreach (var consumer in _internalConsumers.Values)
+        {
+            try { consumer(package); }
+            catch { /* 一个内部消费者的异常不得中断变量写入或驱动采集。 */ }
+        }
+    }
+    private readonly IPlcDriverManager? _driverManager;
 
     // 全量串行写队列（§14.2）：所有变量写汇入同一队列，保序、保重试。
     private readonly Channel<WriteRequest> _writeQueue = Channel.CreateUnbounded<WriteRequest>();
     private readonly Task _writeLoop;
 
     private sealed record WriteRequest(
-        string VarId, object? Value, VariableQuality Quality, TaskCompletionSource Tcs)
+        string VarId, object? Value, WriteSource Source, string RequestId, TaskCompletionSource<WriteResult> Tcs)
     {
         public DateTimeOffset EnqueuedAt { get; } = DateTimeOffset.Now;
     }
 
-    public MemoryVariablePool()
+    public MemoryVariablePool(IPlcDriverManager? driverManager = null)
     {
+        _driverManager = driverManager;
         _writeLoop = Task.Run(RunWriteLoopAsync);
     }
 
@@ -55,6 +103,17 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
             };
             _slots[meta.VarId] = slot;
             _metas[meta.VarId] = meta;
+
+            // Seed the first-release mock PLC from project initial values. This remains simulation-only;
+            // real protocol drivers must be explicitly introduced by a future release.
+            if (meta.Kind == VariableKind.Plc &&
+                _driverManager is MockPlcDriverManager mockManager &&
+                !string.IsNullOrWhiteSpace(meta.Source?.Address))
+            {
+                var driver = mockManager.Resolve(string.IsNullOrWhiteSpace(meta.Source.Channel) ? "MOCK" : meta.Source.Channel);
+                if (driver is MockPlcDriver mockDriver)
+                    mockDriver.SetValue(meta.Source.Address!, NormalizeValue(meta.InitialValue));
+            }
         }
     }
 
@@ -63,7 +122,8 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
     {
         System.Text.Json.JsonElement je => je.ValueKind switch
         {
-            System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => i,
+            System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+            System.Text.Json.JsonValueKind.Number when je.TryGetDouble(out var d) => d,
             System.Text.Json.JsonValueKind.String => je.GetString(),
             System.Text.Json.JsonValueKind.True => true,
             System.Text.Json.JsonValueKind.False => false,
@@ -74,6 +134,13 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
 
     /// <summary>按变量 Id 读取元数据（供订阅管理器按 CycleMs 分组）。</summary>
     public IReadOnlyDictionary<string, VariableMeta> Metas => _metas;
+
+    /// <summary>生成权威元数据快照；Writable 从 IsReadOnly 派生，避免重复持久化状态。</summary>
+    public IReadOnlyCollection<VariableMetadataSnapshot> GetMetadataSnapshot()
+        => _metas.Values
+            .OrderBy(meta => meta.VarId, StringComparer.Ordinal)
+            .Select(meta => new VariableMetadataSnapshot(meta.VarId, meta.Name, meta.DataType, meta.Min, meta.Max, !meta.IsReadOnly, meta.CycleMs))
+            .ToArray();
 
     /// <inheritdoc/>
     public bool TryGetValue(string varId, out object? value)
@@ -98,29 +165,196 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async Task WriteAsync(string varId, object? value, CancellationToken ct = default)
+    public async Task<WriteResult> WriteAsync(string varId, object? value, CancellationToken ct = default, WriteSource source = WriteSource.Runtime, string? requestId = null)
     {
-        if (!_slots.TryGetValue(varId, out _))
-            return;
+        var id = requestId ?? Guid.NewGuid().ToString("N");
+        if (!_slots.ContainsKey(varId))
+            return new WriteResult(false, WriteFailureReason.NotExist, id, $"变量不存在: {varId}");
+        if (_metas.TryGetValue(varId, out var meta) && meta.IsReadOnly)
+            return new WriteResult(false, WriteFailureReason.ReadOnly, id, $"变量只读: {varId}");
 
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await _writeQueue.Writer.WriteAsync(new WriteRequest(varId, value, VariableQuality.Good, tcs), ct);
-        await tcs.Task.WaitAsync(ct);
+        value = NormalizeValue(value);
+        if (meta is not null && !TryValidateWriteValue(meta, value, out var failureReason, out var validationMessage))
+            return new WriteResult(false, failureReason, id, validationMessage);
+
+        var tcs = new TaskCompletionSource<WriteResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = new WriteRequest(varId, value, source, id, tcs);
+
+        // Cancellation can prevent a request from entering the queue. Once accepted, however,
+        // the write may have a physical side effect and cannot safely be reported as cancelled
+        // while it continues in the background. After enqueue, await the definitive receipt.
+        try
+        {
+            await _writeQueue.Writer.WriteAsync(request, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return new WriteResult(false, WriteFailureReason.Cancelled, id, "写入在进入队列前已取消");
+        }
+        catch (Exception ex)
+        {
+            return new WriteResult(false, WriteFailureReason.DriverError, id, ex.Message);
+        }
+
+        try
+        {
+            return await tcs.Task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new WriteResult(false, WriteFailureReason.DriverError, id, ex.Message);
+        }
+    }
+
+    private static bool TryValidateWriteValue(VariableMeta meta, object? value, out WriteFailureReason reason, out string message)
+    {
+        reason = WriteFailureReason.InvalidValue;
+        message = $"变量 {meta.VarId} 的值与数据类型 {meta.DataType} 不匹配";
+
+        var type = meta.DataType.Trim().ToLowerInvariant();
+        if (type == "bool")
+        {
+            if (value is bool) return true;
+            return false;
+        }
+        if (type == "string")
+        {
+            if (value is string) return true;
+            return false;
+        }
+
+        if (type is not ("byte" or "int" or "dint" or "float" or "double" or "real"))
+            return false;
+
+        if (!TryGetNumericValue(value, out var number) || !double.IsFinite(number))
+            return false;
+
+        double? typeMin = type switch
+        {
+            "byte" => byte.MinValue,
+            "int" => short.MinValue,
+            "dint" => int.MinValue,
+            _ => null
+        };
+        double? typeMax = type switch
+        {
+            "byte" => byte.MaxValue,
+            "int" => short.MaxValue,
+            "dint" => int.MaxValue,
+            "float" => float.MaxValue,
+            _ => null
+        };
+        if (type == "float" && number < -float.MaxValue)
+        {
+            reason = WriteFailureReason.ValueOutOfRange;
+            message = $"变量 {meta.VarId} 的值 {number} 超出 float 类型范围";
+            return false;
+        }
+
+        if ((type is "byte" or "int" or "dint") && Math.Truncate(number) != number)
+        {
+            message = $"变量 {meta.VarId} 的数据类型 {meta.DataType} 需要整数";
+            return false;
+        }
+
+        if ((typeMin.HasValue && number < typeMin.Value) || (typeMax.HasValue && number > typeMax.Value) ||
+            (meta.Min.HasValue && number < meta.Min.Value) || (meta.Max.HasValue && number > meta.Max.Value))
+        {
+            reason = WriteFailureReason.ValueOutOfRange;
+            message = $"变量 {meta.VarId} 的值 {number} 超出允许范围";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetNumericValue(object? value, out double number)
+    {
+        switch (value)
+        {
+            case byte v: number = v; return true;
+            case sbyte v: number = v; return true;
+            case short v: number = v; return true;
+            case ushort v: number = v; return true;
+            case int v: number = v; return true;
+            case uint v: number = v; return true;
+            case long v: number = v; return true;
+            case ulong v: number = v; return true;
+            case float v: number = v; return true;
+            case double v: number = v; return true;
+            case decimal v: number = (double)v; return true;
+            default: number = 0; return false;
+        }
     }
 
     /// <inheritdoc/>
     public VariableQuality GetQuality(string varId)
         => _slots.TryGetValue(varId, out var slot) ? slot.Quality : VariableQuality.BadNotExist;
 
+    /// <summary>
+    /// Refresh PLC variables in batches by protocol. Called by the subscription scheduler before emitting a cycle.
+    /// Without a configured driver manager, PLC values remain BadComm and are never treated as healthy memory values.
+    /// </summary>
+    public async Task RefreshFromDriversAsync(IReadOnlyCollection<string> varIds, CancellationToken ct = default)
+    {
+        if (_driverManager is null) return;
+
+        var groups = varIds
+            .Distinct(StringComparer.Ordinal)
+            .Select(id => _metas.TryGetValue(id, out var meta) ? (Id: id, Meta: meta) : default)
+            .Where(x => x.Meta is not null && x.Meta.Kind == VariableKind.Plc && !string.IsNullOrWhiteSpace(x.Meta.Source?.Address))
+            .GroupBy(x => string.IsNullOrWhiteSpace(x.Meta!.Source!.Channel) ? "MOCK" : x.Meta.Source.Channel, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entries = group.ToArray();
+            try
+            {
+                var driver = _driverManager.Resolve(group.Key);
+                if (driver is null || (driver.Status != LinkStatus.Connected && !await driver.ConnectAsync(ct).ConfigureAwait(false)))
+                {
+                    foreach (var entry in entries) SetQuality(entry.Id, VariableQuality.BadComm);
+                    continue;
+                }
+
+                var addresses = entries.Select(x => x.Meta!.Source!.Address!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var values = await driver.ReadBatchAsync(addresses, ct).ConfigureAwait(false);
+                foreach (var entry in entries)
+                {
+                    if (values.TryGetValue(entry.Meta!.Source!.Address!, out var value))
+                    {
+                        ApplyWrite(entry.Id, value);
+                        SetQuality(entry.Id, VariableQuality.Good);
+                    }
+                    else
+                    {
+                        SetQuality(entry.Id, VariableQuality.BadComm);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch
+            {
+                foreach (var entry in entries) SetQuality(entry.Id, VariableQuality.BadComm);
+            }
+        }
+    }
+
     /// <summary>标记指定变量质量位（通讯断/恢复用）。只落内存、不广播——变化由订阅层按 CycleMs 轮询送出（UI 唯一出口）。</summary>
     public void SetQuality(string varId, VariableQuality quality)
     {
         if (!_slots.TryGetValue(varId, out var slot)) return;
+        var changed = false;
         lock (slot.Sync)
         {
-            if (slot.Quality == quality) return;
-            slot.Quality = quality;
+            if (slot.Quality != quality)
+            {
+                slot.Quality = quality;
+                changed = true;
+            }
         }
+        if (changed) PublishInternalChange(varId, slot);
     }
 
     /// <summary>写循环（§14.2）：消费写队列，逐条落值并广播。全量串行、保序（默认 Strict 语义，每项都下发）。</summary>
@@ -132,32 +366,87 @@ public sealed class MemoryVariablePool : IVariablePool, IAsyncDisposable
             {
                 try
                 {
-                    HandleWrite(req);
+                    await HandleWriteAsync(req).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    req.Tcs.TrySetException(ex);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, ex.Message));
                 }
             }
         }
     }
 
     /// <summary>处理单条写请求：直接落值并广播（纯 FIFO 串行，§14.2 默认 Strict）。</summary>
-    private void HandleWrite(WriteRequest req)
+    private async Task HandleWriteAsync(WriteRequest req)
     {
-        ApplyWrite(req.VarId, req.Value, req.Quality);
-        req.Tcs.TrySetResult();
+        if (!_slots.ContainsKey(req.VarId))
+        {
+            req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.NotExist, req.RequestId, $"变量不存在: {req.VarId}"));
+            return;
+        }
+        if (_metas.TryGetValue(req.VarId, out var meta) && meta.IsReadOnly)
+        {
+            req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.ReadOnly, req.RequestId, $"变量只读: {req.VarId}"));
+            return;
+        }
+        if (_metas.TryGetValue(req.VarId, out meta) && meta.Kind == VariableKind.Plc)
+        {
+            if (_driverManager is null || string.IsNullOrWhiteSpace(meta.Source?.Address))
+            {
+                SetQuality(req.VarId, VariableQuality.BadComm);
+                req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 模拟驱动未配置或变量地址为空"));
+                return;
+            }
+
+            try
+            {
+                var protocol = string.IsNullOrWhiteSpace(meta.Source.Channel) ? "MOCK" : meta.Source.Channel;
+                var driver = _driverManager.Resolve(protocol);
+                if (driver is null || (driver.Status != LinkStatus.Connected && !await driver.ConnectAsync().ConfigureAwait(false)))
+                {
+                    SetQuality(req.VarId, VariableQuality.BadComm);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 驱动连接失败"));
+                    return;
+                }
+
+                if (!await driver.WriteAsync(meta.Source.Address, req.Value).ConfigureAwait(false))
+                {
+                    SetQuality(req.VarId, VariableQuality.BadComm);
+                    req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, "PLC 驱动拒绝写入"));
+                    return;
+                }
+
+                ApplyWrite(req.VarId, req.Value);
+                SetQuality(req.VarId, VariableQuality.Good);
+                req.Tcs.TrySetResult(new WriteResult(true, WriteFailureReason.None, req.RequestId, "模拟 PLC 写入成功"));
+                return;
+            }
+            catch (Exception ex)
+            {
+                SetQuality(req.VarId, VariableQuality.BadComm);
+                req.Tcs.TrySetResult(new WriteResult(false, WriteFailureReason.DriverError, req.RequestId, ex.Message));
+                return;
+            }
+        }
+
+        ApplyWrite(req.VarId, req.Value);
+        req.Tcs.TrySetResult(new WriteResult(true, WriteFailureReason.None, req.RequestId, "写入成功"));
     }
 
-    private void ApplyWrite(string varId, object? value, VariableQuality quality)
+    private void ApplyWrite(string varId, object? value)
     {
         if (!_slots.TryGetValue(varId, out var slot)) return;
+        var changed = false;
         lock (slot.Sync)
         {
-            slot.Value = value;
-            slot.Quality = quality;
-            // 不广播：通知统一由订阅层按 CycleMs 轮询送出（UI 唯一出口）。
+            if (!Equals(slot.Value, value))
+            {
+                slot.Value = value;
+                changed = true;
+            }
+            // UI 仍只由 IVariableSubscribeManager 轮询分发。
         }
+        if (changed) PublishInternalChange(varId, slot);
     }
 
     public async ValueTask DisposeAsync()

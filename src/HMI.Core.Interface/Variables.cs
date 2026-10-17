@@ -11,7 +11,9 @@ public sealed class VariableValuePackage
     /// <summary>质量位（§3.7）。</summary>
     public VariableQuality Quality { get; init; }
     /// <summary>采集时间戳。</summary>
-    public DateTimeOffset Timestamp { get; init; }
+    public DateTimeOffset? DeviceTimestamp { get; init; }
+    /// <summary>服务端收到/更新该值的时间戳（UTC）。</summary>
+    public DateTimeOffset ServerTimestamp { get; init; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>表达式引擎读取变量值的隔离接口（§11 IVariableValueProvider）。</summary>
@@ -28,7 +30,7 @@ public interface IVariablePool : IVariableValueProvider
     Task<object?> ReadAsync(string varId, CancellationToken ct = default);
 
     /// <summary>异步写变量。写请求进入全量串行写队列，保序、保重试（§3.4 / §14.2）。</summary>
-    Task WriteAsync(string varId, object? value, CancellationToken ct = default);
+    Task<WriteResult> WriteAsync(string varId, object? value, CancellationToken ct = default, WriteSource source = WriteSource.Runtime, string? requestId = null);
 
     /// <summary>读取变量当前质量位。</summary>
     VariableQuality GetQuality(string varId);

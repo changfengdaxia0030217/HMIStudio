@@ -1,0 +1,34 @@
+{
+  "name": "HMIStudio Cloud Development",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0-noble",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "forwardPorts": [
+    5080,
+    5173
+  ],
+  "portsAttributes": {
+    "5080": {
+      "label": "HMIStudio Web Preview",
+      "onAutoForward": "openBrowser"
+    },
+    "5173": {
+      "label": "HMIStudio Frontend Dev",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start-hmistudio.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

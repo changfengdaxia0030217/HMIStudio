@@ -1,13 +1,6 @@
 // 其余业务模块契约（§8/§9/§10 / §11 其余接口）。首切片仅声明，业务实现在后续切片实现。
 namespace HMI.Core.Interface;
 
-/// <summary>报警管理：规则评估、确认、历史查询（§8.2 / §11 IAlarmManager）。</summary>
-public interface IAlarmManager
-{
-    /// <summary>确认指定报警。</summary>
-    Task AcknowledgeAsync(string alarmId, CancellationToken ct = default);
-}
-
 /// <summary>周期任务调度器（§9.1 / §11 IPeriodicTaskScheduler）。</summary>
 public interface IPeriodicTaskScheduler
 {

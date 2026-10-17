@@ -25,6 +25,10 @@ public sealed class VariableMeta
     public VariableKind Kind { get; set; } = VariableKind.Memory;
     /// <summary>数据类型：byte / int / dint / float / bool / string（§3.8）。</summary>
     public string DataType { get; set; } = "int";
+    /// <summary>可选最小值，用于输入校验与量程展示。</summary>
+    public double? Min { get; set; }
+    /// <summary>可选最大值，用于输入校验与量程展示。</summary>
+    public double? Max { get; set; }
     /// <summary>数据源绑定（PLC 协议通道 / 相机通道）。</summary>
     public VariableSource? Source { get; set; }
     /// <summary>独立刷新周期 ms（§3.1，Load 60 秒）。</summary>

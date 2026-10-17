@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HMI.Core.Interface;
 using HMI.Core.Model;
 
@@ -13,32 +14,238 @@ public sealed class ProjectStorage : IProjectStorage
         var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
         var project = HmiJson.Deserialize(json)
             ?? throw new InvalidDataException($"工程解析失败: {path}");
+        if (project.FormatVersion > HmiProject.CurrentFormatVersion)
+            throw new InvalidDataException($"工程格式版本 {project.FormatVersion} 高于当前支持版本 {HmiProject.CurrentFormatVersion}，请使用较新版本的 HMIStudio 打开。");
+        if (project.FormatVersion < 1)
+            throw new InvalidDataException($"工程格式版本无效: {project.FormatVersion}");
         return project;
     }
 
     /// <inheritdoc/>
     public async Task SaveAsync(string path, object project, CancellationToken ct = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(project);
+
+        // 先序列化，再写入目标文件同目录的临时文件，避免写入中断破坏原工程。
         var json = HmiJson.Serialize((HmiProject)project);
-        await File.WriteAllTextAsync(path, json, ct).ConfigureAwait(false);
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath)!;
+        Directory.CreateDirectory(directory);
+
+        var tempPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            // 临时文件与目标文件位于同一目录，避免跨卷移动。
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            // 清理失败不应覆盖原始保存异常。
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<string>> ValidateAsync(string path, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> ValidateAsync(string path, CancellationToken ct = default)
     {
         var errors = new List<string>();
         try
         {
-            var json = File.ReadAllText(path);
+            var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
             var p = HmiJson.Deserialize(json);
-            if (p is null) { errors.Add("工程为空或格式错误"); return Task.FromResult<IReadOnlyList<string>>(errors); }
+            if (p is null)
+            {
+                errors.Add("工程为空或格式错误");
+                return errors;
+            }
+
+            if (p.FormatVersion > HmiProject.CurrentFormatVersion)
+                errors.Add($"工程格式版本 {p.FormatVersion} 高于当前支持版本 {HmiProject.CurrentFormatVersion}");
+            if (p.FormatVersion < 1)
+                errors.Add($"工程格式版本无效: {p.FormatVersion}");
+
+            if (p.BaseWidth <= 0 || p.BaseHeight <= 0 || p.BaseWidth > 8192 || p.BaseHeight > 8192)
+                errors.Add("工程基准宽高必须在 1 到 8192 之间");
+
+            var screenIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var screen in p.Screens)
+            {
+                if (string.IsNullOrWhiteSpace(screen.Id))
+                    errors.Add("画面 ID 不能为空");
+                else if (!screenIds.Add(screen.Id))
+                    errors.Add($"画面 Id 重复: {screen.Id}");
+
+                if (string.IsNullOrWhiteSpace(screen.Title))
+                    errors.Add($"画面 {screen.Id} 名称不能为空");
+                if (screen.Width <= 0 || screen.Height <= 0 || screen.Width > 8192 || screen.Height > 8192)
+                    errors.Add($"画面 {screen.Id} 的宽高必须在 1 到 8192 之间");
+
+                var controlIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var control in screen.Controls)
+                {
+                    if (string.IsNullOrWhiteSpace(control.Id))
+                        errors.Add($"画面 {screen.Id} 存在控件 ID 为空");
+                    else if (!controlIds.Add(control.Id))
+                        errors.Add($"画面 {screen.Id} 的控件 Id 重复: {control.Id}");
+
+                    if (!double.IsFinite(control.X) || !double.IsFinite(control.Y) ||
+                        !double.IsFinite(control.Width) || !double.IsFinite(control.Height) ||
+                        control.Width <= 0 || control.Height <= 0)
+                        errors.Add($"画面 {screen.Id} 的控件 {control.Id} 坐标或尺寸无效");
+
+                    foreach (var binding in control.Properties)
+                        ValidatePropertySource(binding.Value?.Source, screen.Id, control.Id, p.Variables, errors);
+
+                    if (control.Properties.TryGetValue("writeVarId", out var writeBinding) &&
+                        TryGetStaticString(writeBinding?.Source, out var writeVarId) &&
+                        !string.IsNullOrWhiteSpace(writeVarId) &&
+                        !p.Variables.Any(variable => string.Equals(variable.VarId, writeVarId, StringComparison.Ordinal)))
+                        errors.Add($"画面 {screen.Id} 的按钮 {control.Id} 写入了不存在的变量: {writeVarId}");
+
+                    if (control.Properties.TryGetValue("navigateToScreenId", out var navigationBinding) &&
+                        TryGetStaticString(navigationBinding?.Source, out var targetScreenId) &&
+                        !string.IsNullOrWhiteSpace(targetScreenId) &&
+                        !p.Screens.Any(target => string.Equals(target.Id, targetScreenId, StringComparison.Ordinal)))
+                        errors.Add($"画面 {screen.Id} 的控件 {control.Id} 跳转目标不存在: {targetScreenId}");
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(p.StartScreenId) || !p.Screens.Any(s => s.Id == p.StartScreenId))
                 errors.Add("启动画面缺失");
-            var ids = new HashSet<string>();
+
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var allowedDataTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "byte", "int", "dint", "float", "double", "real", "bool", "string" };
             foreach (var v in p.Variables)
-                if (!ids.Add(v.VarId)) errors.Add($"变量 Id 重复: {v.VarId}");
+            {
+                if (string.IsNullOrWhiteSpace(v.VarId))
+                    errors.Add("变量 Id 不能为空");
+                else if (!ids.Add(v.VarId))
+                    errors.Add($"变量 Id 重复: {v.VarId}");
+
+                if (string.IsNullOrWhiteSpace(v.Name))
+                    errors.Add($"变量 {v.VarId} 的名称不能为空");
+                if (string.IsNullOrWhiteSpace(v.DataType) || !allowedDataTypes.Contains(v.DataType.Trim()))
+                    errors.Add($"变量 {v.VarId} 的数据类型无效: {v.DataType}");
+                if (v.Min.HasValue && !double.IsFinite(v.Min.Value))
+                    errors.Add($"变量 {v.VarId} 的最小值必须是有限数值");
+                if (v.Max.HasValue && !double.IsFinite(v.Max.Value))
+                    errors.Add($"变量 {v.VarId} 的最大值必须是有限数值");
+                if (v.Min.HasValue && v.Max.HasValue && v.Min.Value > v.Max.Value)
+                    errors.Add($"变量 {v.VarId} 的最小值不能大于最大值");
+                if (v.CycleMs <= 0)
+                    errors.Add($"变量 {v.VarId} 的刷新周期必须大于 0");
+                if (v.DebounceMs < 0)
+                    errors.Add($"变量 {v.VarId} 的防抖时间不能小于 0");
+            }
+
+            var allowedAlarmOperators = new HashSet<string>(StringComparer.Ordinal)
+                { ">", ">=", "<", "<=", "==", "=", "!=", "<>" };
+            var alarmIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var rule in p.AlarmRules.Where(rule => rule.Enabled))
+            {
+                if (string.IsNullOrWhiteSpace(rule.Id))
+                    errors.Add("启用的报警规则必须设置 Id");
+                else if (!alarmIds.Add(rule.Id.Trim()))
+                    errors.Add($"报警规则 Id 重复: {rule.Id}");
+
+                if (string.IsNullOrWhiteSpace(rule.Name))
+                    errors.Add($"报警规则 {rule.Id} 的名称不能为空");
+                if (string.IsNullOrWhiteSpace(rule.VarId))
+                    errors.Add($"报警规则 {rule.Id} 的变量 Id 不能为空");
+                else if (!p.Variables.Any(variable => string.Equals(variable.VarId, rule.VarId, StringComparison.Ordinal)))
+                    errors.Add($"报警规则 {rule.Id} 引用了不存在的变量: {rule.VarId}");
+
+                if (string.IsNullOrWhiteSpace(rule.Operator) || !allowedAlarmOperators.Contains(rule.Operator.Trim()))
+                    errors.Add($"报警规则 {rule.Id} 的比较运算符无效: {rule.Operator}");
+                if (!IsValidAlarmThreshold(rule.Value))
+                    errors.Add($"报警规则 {rule.Id} 的比较值必须是字符串、布尔值或有限数值");
+            }
         }
-        catch (Exception ex) { errors.Add(ex.Message); }
-        return Task.FromResult<IReadOnlyList<string>>(errors);
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            errors.Add(ex.Message);
+        }
+
+        return errors;
+    }
+
+    private static bool TryGetStaticString(IPropertySource? source, out string value)
+    {
+        value = string.Empty;
+        if (source is not StaticPropertySource staticSource)
+            return false;
+
+        switch (staticSource.Value)
+        {
+            case string text:
+                value = text;
+                return true;
+            case JsonElement { ValueKind: JsonValueKind.String } element:
+                value = element.GetString() ?? string.Empty;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsValidAlarmThreshold(object? value)
+    {
+        if (value is null) return false;
+        if (value is JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String or JsonValueKind.True or JsonValueKind.False => true,
+                JsonValueKind.Number => element.TryGetDouble(out var number) && double.IsFinite(number),
+                _ => false
+            };
+        }
+
+        if (value is string or bool) return true;
+        if (value is byte or sbyte or short or ushort or int or uint or long or ulong or decimal) return true;
+        return value is float single && float.IsFinite(single) ||
+               value is double numberValue && double.IsFinite(numberValue);
+    }
+
+    private static void ValidatePropertySource(
+        IPropertySource? source,
+        string screenId,
+        string controlId,
+        IReadOnlyCollection<VariableMeta> variables,
+        List<string> errors)
+    {
+        switch (source)
+        {
+            case VariablePropertySource variableSource:
+                if (string.IsNullOrWhiteSpace(variableSource.VarId) ||
+                    !variables.Any(variable => string.Equals(variable.VarId, variableSource.VarId, StringComparison.Ordinal)))
+                    errors.Add($"画面 {screenId} 的控件 {controlId} 引用了不存在的变量: {variableSource.VarId}");
+                break;
+            case ConditionalPropertySource conditionalSource:
+                ValidatePropertySource(conditionalSource.Condition, screenId, controlId, variables, errors);
+                ValidatePropertySource(conditionalSource.WhenTrue, screenId, controlId, variables, errors);
+                ValidatePropertySource(conditionalSource.WhenFalse, screenId, controlId, variables, errors);
+                break;
+        }
     }
 }
