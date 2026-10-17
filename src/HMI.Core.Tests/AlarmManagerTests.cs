@@ -603,10 +603,24 @@ public sealed class AlarmManagerTests
             Assert.Single(triggered);
             Assert.Equal(1, await alarms.GetHistoryCountAsync(eventType: "Triggered"));
 
+            // Event type and keyword filters are case-insensitive and trim surrounding whitespace.
+            var normalizedTriggered = await alarms.GetHistoryAsync(10, eventType: "  tRiGgErEd  ");
+            Assert.Equal(triggered.Select(item => item.Sequence), normalizedTriggered.Select(item => item.Sequence));
+            Assert.Equal(1, await alarms.GetHistoryCountAsync(eventType: "  tRiGgErEd  "));
+
             var matchingMessage = await alarms.GetHistoryAsync(10, search: "temperature exceeds limit");
             Assert.Equal(3, matchingMessage.Count);
             Assert.Equal(matchingMessage.Count,
                 await alarms.GetHistoryCountAsync(search: "temperature exceeds limit"));
+
+            var normalizedSearch = await alarms.GetHistoryAsync(10, search: "  TEMPERATURE EXCEEDS LIMIT  ");
+            Assert.Equal(matchingMessage.Select(item => item.Sequence), normalizedSearch.Select(item => item.Sequence));
+            Assert.Equal(normalizedSearch.Count,
+                await alarms.GetHistoryCountAsync(search: "  TEMPERATURE EXCEEDS LIMIT  "));
+            var combinedFilters = await alarms.GetHistoryAsync(10, eventType: "  triggered ", search: " TEMPERATURE EXCEEDS LIMIT ");
+            Assert.Single(combinedFilters);
+            Assert.Equal(combinedFilters.Count,
+                await alarms.GetHistoryCountAsync(eventType: "  TRIGGERED ", search: " temperature exceeds limit "));
 
             var sameDay = await alarms.GetHistoryAsync(10, fromDate: fromDate, toDate: toDate);
             Assert.Equal(3, sameDay.Count);
