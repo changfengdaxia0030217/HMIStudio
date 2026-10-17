@@ -31,6 +31,7 @@ function eventLabel(value: string) {
 export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [active, setActive] = useState<ActiveAlarm[]>([]);
   const [history, setHistory] = useState<AlarmEvent[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [historyEventType, setHistoryEventType] = useState("");
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
@@ -43,14 +44,18 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const [activeResponse, historyResponse] = await Promise.all([
+      const filters = new URLSearchParams({ ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) });
+      const historyQuery = new URLSearchParams({ limit: "200", offset: String(historyPage * 200), ...Object.fromEntries(filters) });
+      const [activeResponse, historyResponse, countResponse] = await Promise.all([
         fetch(`${API}/api/alarms/active`),
-        fetch(`${API}/api/alarms/history?${new URLSearchParams({ limit: "200", offset: String(historyPage * 200), ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) })}`),
+        fetch(`${API}/api/alarms/history?${historyQuery}`),
+        fetch(`${API}/api/alarms/history/count?${filters}`),
       ]);
-      if (!activeResponse.ok || !historyResponse.ok) throw new Error("报警接口返回异常状态");
-      const [activeItems, historyItems] = await Promise.all([activeResponse.json(), historyResponse.json()]);
+      if (!activeResponse.ok || !historyResponse.ok || !countResponse.ok) throw new Error("报警接口返回异常状态");
+      const [activeItems, historyItems, historyCount] = await Promise.all([activeResponse.json(), historyResponse.json(), countResponse.json()]);
       setActive(activeItems as ActiveAlarm[]);
       setHistory(historyItems as AlarmEvent[]);
+      setHistoryTotal(historyCount as number);
       setError("");
     } catch {
       setError("无法读取报警数据，请确认 HMIStudio 本机服务正在运行。");
@@ -100,7 +105,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
 
       <div className="alarm-summary-grid">
         <div className="alarm-summary-card"><span className="alarm-summary-icon active"><AlertTriangle size={18} /></span><div><span>活动报警</span><strong>{active.length}</strong><small>尚未恢复的报警</small></div></div>
-        <div className="alarm-summary-card"><span className="alarm-summary-icon history"><Clock3 size={18} /></span><div><span>历史事件</span><strong>{history.length}</strong><small>当前显示最近 200 条</small></div></div>
+        <div className="alarm-summary-card"><span className="alarm-summary-icon history"><Clock3 size={18} /></span><div><span>历史事件</span><strong>{historyTotal}</strong><small>符合当前筛选条件</small></div></div>
         <div className="alarm-summary-card"><span className="alarm-summary-icon pending"><ShieldAlert size={18} /></span><div><span>待确认</span><strong>{active.filter(item => !item.acknowledged).length}</strong><small>需要操作员确认</small></div></div>
       </div>
 
@@ -118,7 +123,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
       </section>
 
       <section className="panel alarm-table-panel">
-        <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件</p></div><span className="table-count">{history.length} 条</span></div>
+        <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件</p></div><span className="table-count">{historyTotal} 条</span></div>
         <div className="alarm-history-filters">
           <label>事件类型
             <select value={historyEventType} onChange={event => { setHistoryEventType(event.target.value); setHistoryPage(0); }}>
@@ -141,7 +146,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
           </tr>)}
           {!history.length && <tr><td colSpan={7} className="empty-state">{loading ? "正在读取报警历史…" : "暂无报警历史记录"}</td></tr>}
         </tbody></table></div>
-        <div className="table-footer alarm-history-pagination"><span><Check size={14} />历史由本机 SQLite 保存</span><span>第 {historyPage + 1} 页 · 每页最多 200 条</span><div><button className="alarm-secondary-button" disabled={historyPage === 0 || loading} onClick={() => setHistoryPage(page => Math.max(0, page - 1))}>上一页</button><button className="alarm-secondary-button" disabled={history.length < 200 || loading} onClick={() => setHistoryPage(page => page + 1)}>下一页</button></div></div>
+        <div className="table-footer alarm-history-pagination"><span><Check size={14} />历史由本机 SQLite 保存</span><span>第 {historyPage + 1} / {Math.max(1, Math.ceil(historyTotal / 200))} 页 · 共 {historyTotal} 条</span><div><button className="alarm-secondary-button" disabled={historyPage === 0 || loading} onClick={() => setHistoryPage(page => Math.max(0, page - 1))}>上一页</button><button className="alarm-secondary-button" disabled={historyPage + 1 >= Math.ceil(historyTotal / 200) || loading} onClick={() => setHistoryPage(page => page + 1)}>下一页</button></div></div>
       </section>
     </div>
   );

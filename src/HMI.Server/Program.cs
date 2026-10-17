@@ -387,6 +387,9 @@ app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, Cancellat
 app.MapGet("/api/alarms/history", async (int? limit, int? offset, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search, offset ?? 0)));
 
+app.MapGet("/api/alarms/history/count", async (string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
+    Results.Ok(await runtime.Alarms.GetHistoryCountAsync(ct, eventType, search)));
+
 app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
 {
     var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct, eventType, search);

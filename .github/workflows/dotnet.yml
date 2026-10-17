@@ -268,6 +268,8 @@ jobs:
             $firstHistoryPage = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=0" -TimeoutSec 5)
             $secondHistoryPage = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=1&offset=1" -TimeoutSec 5)
             if ($firstHistoryPage.Count -ne 1 -or $secondHistoryPage.Count -ne 1 -or $firstHistoryPage[0].sequence -eq $secondHistoryPage[0].sequence) { throw "Alarm history offset pagination did not return distinct records" }
+            $filteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Triggered&search=target-speed-high" -TimeoutSec 5
+            if ([int]$filteredCount -lt 1) { throw "Alarm history count did not respect the selected filters" }
             $filteredCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-filtered-alarm-history.csv"
             Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high" -OutFile $filteredCsvPath -TimeoutSec 5
             $filteredCsv = Get-Content -Path $filteredCsvPath -Raw

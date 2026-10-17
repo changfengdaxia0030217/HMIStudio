@@ -208,6 +208,32 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         finally { _stateGate.Release(); }
     }
 
+    public async Task<int> GetHistoryCountAsync(
+        CancellationToken ct = default,
+        string? eventType = null,
+        string? search = null)
+    {
+        eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM AlarmHistory
+            WHERE ($eventType IS NULL OR lower(EventType) = lower($eventType))
+              AND ($search IS NULL OR instr(lower(
+                    coalesce(AlarmId, '') || ' ' || coalesce(RuleId, '') || ' ' ||
+                    coalesce(RuleName, '') || ' ' || coalesce(VarId, '') || ' ' ||
+                    coalesce(Message, '') || ' ' || coalesce(Value, '') || ' ' ||
+                    coalesce(Quality, '')), lower($search)) > 0);
+            """;
+        command.Parameters.AddWithValue("$eventType", (object?)eventType ?? DBNull.Value);
+        command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
+        var count = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return Convert.ToInt32(count, CultureInfo.InvariantCulture);
+    }
+
     public async Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(
         int limit = 100,
         CancellationToken ct = default,

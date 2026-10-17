@@ -7,6 +7,11 @@ public interface IAlarmManager
     Task<IReadOnlyList<ActiveAlarm>> GetActiveAsync(
         CancellationToken ct = default);
 
+    Task<int> GetHistoryCountAsync(
+        CancellationToken ct = default,
+        string? eventType = null,
+        string? search = null);
+
     Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(
         int limit = 100,
         CancellationToken ct = default,
