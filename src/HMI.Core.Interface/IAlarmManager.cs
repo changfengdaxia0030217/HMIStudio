@@ -9,5 +9,7 @@ public interface IAlarmManager
 
     Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(
         int limit = 100,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? eventType = null,
+        string? search = null);
 }
