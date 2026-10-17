@@ -110,7 +110,7 @@ export default function Editor({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [backupInspection, setBackupInspection] = useState<null | { ok: boolean; error?: string; projectValid?: boolean; projectErrors?: string[]; projectFile?: string; screenCount?: number; variableCount?: number; startScreenId?: string; alarmHistoryIncluded?: boolean; alarmDatabaseIntegrity?: string; message?: string }>(null);
+  const [backupInspection, setBackupInspection] = useState<null | { ok: boolean; error?: string; projectValid?: boolean; projectErrors?: string[]; projectFile?: string; screenCount?: number; variableCount?: number; startScreenId?: string; alarmHistoryIncluded?: boolean; alarmDatabaseIntegrity?: string; alarmDatabaseSchemaValid?: boolean; message?: string }>(null);
   const [inspectingBackup, setInspectingBackup] = useState(false);
   const backupFileRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -523,7 +523,8 @@ export default function Editor({ onBack }: { onBack: () => void }) {
           <dt>画面数量</dt><dd>{backupInspection.screenCount ?? "—"}</dd>
           <dt>变量数量</dt><dd>{backupInspection.variableCount ?? "—"}</dd>
           <dt>启动画面</dt><dd>{backupInspection.startScreenId ?? "—"}</dd>
-          <dt>报警历史</dt><dd>{backupInspection.alarmHistoryIncluded ? `包含（SQLite 完整性：${backupInspection.alarmDatabaseIntegrity ?? "未检查"}）` : "不包含"}</dd>
+          <dt>报警历史</dt><dd>{backupInspection.alarmHistoryIncluded ? "包含" : "不包含"}</dd>
+          {backupInspection.alarmHistoryIncluded && <><dt>SQLite 完整性</dt><dd>{backupInspection.alarmDatabaseIntegrity ?? "未检查"}</dd><dt>报警表结构</dt><dd>{backupInspection.alarmDatabaseSchemaValid === true ? "有效（10 个必要字段齐全）" : backupInspection.alarmDatabaseSchemaValid === false ? "无效（缺少必要字段）" : "未检查"}</dd></>}
         </dl>}
         {!!backupInspection.projectErrors?.length && <ul>{backupInspection.projectErrors.map((item, index) => <li key={index}>{item}</li>)}</ul>}
         <p className="backup-inspection-note">{backupInspection.message ?? "此操作仅检查备份内容，不会恢复或覆盖当前工程。"}</p>
