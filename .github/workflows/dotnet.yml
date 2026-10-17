@@ -246,3 +246,36 @@ jobs:
           } finally {
             if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
           }
+
+      - name: Publish portable Windows x64 package
+        shell: pwsh
+        run: .\Publish-HMIStudio-Windows.ps1
+      - name: Smoke test self-contained Windows package
+        shell: pwsh
+        run: |
+          $publishPath = Join-Path $PWD "artifacts/HMIStudio-win-x64"
+          $exe = Join-Path $publishPath "HMI.Server.exe"
+          if (-not (Test-Path $exe)) { throw "Self-contained executable was not published" }
+          if (-not (Test-Path (Join-Path $publishPath "wwwroot/index.html"))) { throw "Published frontend assets are missing" }
+          $env:HMISTUDIO_URLS = "http://127.0.0.1:5082"
+          $server = Start-Process -FilePath $exe -WorkingDirectory $publishPath -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\hmistudio-published.log" -RedirectStandardError "$env:RUNNER_TEMP\hmistudio-published-error.log"
+          try {
+            $health = $null
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 1
+              try { $health = Invoke-RestMethod "http://127.0.0.1:5082/api/health" -TimeoutSec 2; if ($health.status -eq "ok") { break } } catch {}
+              if ($server.HasExited) { break }
+            }
+            if ($null -eq $health -or $health.status -ne "ok") {
+              Get-Content "$env:RUNNER_TEMP\hmistudio-published.log" -ErrorAction SilentlyContinue
+              Get-Content "$env:RUNNER_TEMP\hmistudio-published-error.log" -ErrorAction SilentlyContinue
+              throw "Self-contained Windows package failed health check"
+            }
+            $page = Invoke-WebRequest "http://127.0.0.1:5082/" -TimeoutSec 5
+            if ($page.StatusCode -ne 200 -or $page.Content -notmatch "HMIStudio") { throw "Published frontend did not serve successfully" }
+            $variables = @(Invoke-RestMethod "http://127.0.0.1:5082/api/variables" -TimeoutSec 5)
+            if ($variables.Count -lt 1) { throw "Published runtime returned no variables" }
+            Write-Host "Self-contained package passed health, frontend, and variable API smoke tests"
+          } finally {
+            if (-not $server.HasExited) { & taskkill /PID $server.Id /T /F | Out-Null }
+          }
