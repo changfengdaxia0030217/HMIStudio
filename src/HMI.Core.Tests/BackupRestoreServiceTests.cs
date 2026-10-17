@@ -111,6 +111,39 @@ public sealed class BackupRestoreServiceTests
         }
     }
 
+    [Fact]
+    public async Task ApplyPendingPreservesRollbackJournalWhenOriginalProjectBackupIsMissing()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var data = Path.Combine(root, "data");
+            var pending = Path.Combine(data, "restore-pending");
+            var rollback = Path.Combine(data, "restore-rollback");
+            Directory.CreateDirectory(pending);
+            Directory.CreateDirectory(rollback);
+            await File.WriteAllTextAsync(
+                Path.Combine(rollback, "state.json"),
+                """{"projectExisted":true,"alarmDatabaseWasTouched":false,"dbExisted":false}""");
+
+            var projectPath = Path.Combine(root, "project.hmijob");
+            await File.WriteAllTextAsync(projectPath, "original-live-project");
+
+            await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BackupRestoreService.ApplyPendingAsync(
+                    root, projectPath, Path.Combine(data, "alarms.sqlite"), CancellationToken.None));
+
+            Assert.True(Directory.Exists(rollback));
+            Assert.True(File.Exists(Path.Combine(rollback, "state.json")));
+            Assert.Equal("original-live-project", await File.ReadAllTextAsync(projectPath));
+            Assert.True(Directory.Exists(pending));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "HMIStudio.Tests", Guid.NewGuid().ToString("N"));
