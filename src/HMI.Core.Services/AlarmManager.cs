@@ -286,6 +286,12 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         (fromDate, toDate) = ValidateHistoryDateFilters(fromDate, toDate);
+        // The API uses a 32-bit non-negative offset. At int.MaxValue, the offset
+        // is already at least as large as the maximum representable history count;
+        // short-circuit rather than relying on provider-specific SQLite offset binding.
+        if (offset == int.MaxValue)
+            return Array.Empty<AlarmEventRecord>();
+
         var result = new List<AlarmEventRecord>();
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
