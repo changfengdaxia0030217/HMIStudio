@@ -458,6 +458,12 @@ app.MapGet("/api/alarms/history", async (int? limit, int? offset, string? eventT
 {
     if (!IsValidAlarmDateRange(fromDate, toDate))
         return (IResult)Results.BadRequest(new { error = "日期格式必须为 yyyy-MM-dd，且开始日期不能晚于结束日期。" });
+
+    // Keep the public API's extreme-offset behavior explicit instead of relying on
+    // SQLite/provider integer binding for a value that cannot address a real page.
+    if (offset == int.MaxValue)
+        return Results.Ok(Array.Empty<AlarmEventRecord>());
+
     return Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search, offset ?? 0, fromDate, toDate));
 });
 
