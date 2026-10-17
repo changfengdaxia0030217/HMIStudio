@@ -420,6 +420,41 @@ public sealed class AlarmManagerTests
         }
     }
 
+    [Fact]
+    public async Task HistoryPaginationReturnsStableNonOverlappingPages()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, CreateRules(), Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 1);
+            var alarmId = Assert.Single(await alarms.GetActiveAsync()).AlarmId;
+            await alarms.AcknowledgeAsync(alarmId);
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 3);
+
+            var firstPage = await alarms.GetHistoryAsync(limit: 2, offset: 0);
+            var secondPage = await alarms.GetHistoryAsync(limit: 2, offset: 2);
+            var beyondEnd = await alarms.GetHistoryAsync(limit: 2, offset: 3);
+
+            Assert.Equal(2, firstPage.Count);
+            Assert.Single(secondPage);
+            Assert.Empty(beyondEnd);
+            Assert.Equal(new[] { "Recovered", "Acknowledged", "Triggered" },
+                firstPage.Concat(secondPage).Select(item => item.EventType));
+            Assert.Equal(3, firstPage.Concat(secondPage).Select(item => item.Sequence).Distinct().Count());
+            Assert.Equal(3, await alarms.GetHistoryCountAsync());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static MemoryVariablePool CreatePool()
     {
         var pool = new MemoryVariablePool();
