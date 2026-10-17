@@ -278,9 +278,10 @@ jobs:
             $dateFilteredHistory = @(ConvertFrom-Json -InputObject $dateFilteredPayload)
             $dateFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5
             if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results ($($dateFilteredHistory.Count)) and count ($dateFilteredCount) do not agree for $historyDate" }
-            $futureHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5)
+            $futurePayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5).Content
+            $futureHistory = @(ConvertFrom-Json -InputObject $futurePayload)
             $futureCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5
-            if ($futureHistory.Count -ne 0 -or [int]$futureCount -ne 0) { throw "Alarm history future date range should return no records" }
+            if ($futureHistory.Count -ne 0 -or [int]$futureCount -ne 0) { throw "Alarm history future date range should return no records (payload: $futurePayload; count: $futureCount)" }
             foreach ($badRange in @("fromDate=not-a-date", "fromDate=2026-10-18&toDate=2026-10-17")) {
               $rangeRejected = $false
               try { Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?$badRange" -TimeoutSec 5 | Out-Null }
