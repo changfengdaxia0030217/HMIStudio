@@ -89,6 +89,42 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task StartupReconcilesPersistedAlarmAgainstCurrentGoodValue()
+    {
+        var directory = CreateTempDirectory();
+        var databasePath = Path.Combine(directory, "alarms.sqlite");
+        try
+        {
+            await using var pool = CreatePool();
+            await using (var first = await AlarmManager.CreateAsync(pool, CreateRules(), databasePath))
+            {
+                Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+                await WaitForHistoryCountAsync(first, 1);
+                Assert.Single(await first.GetActiveAsync());
+            }
+
+            // The process was stopped while the alarm was active, but the current
+            // variable value is already back below the configured threshold.
+            Assert.True((await pool.WriteAsync("temperature", 70.0)).Ok);
+
+            await using var restarted = await AlarmManager.CreateAsync(pool, CreateRules(), databasePath);
+            await WaitForHistoryCountAsync(restarted, 2);
+
+            Assert.Empty(await restarted.GetActiveAsync());
+            var history = await restarted.GetHistoryAsync(10);
+            Assert.Equal(new[] { "Recovered", "Triggered" }, history.Select(item => item.EventType));
+            Assert.Equal(history[0].AlarmId, history[1].AlarmId);
+            Assert.Equal("70", history[0].Value);
+            Assert.Equal("Good", history[0].Quality);
+            Assert.Equal(2, await restarted.GetHistoryCountAsync());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BadQualityDoesNotClearActiveAlarmUntilGoodQualityReturns()
     {
         var directory = CreateTempDirectory();
