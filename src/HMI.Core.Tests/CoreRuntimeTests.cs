@@ -178,7 +178,7 @@ public sealed class CoreRuntimeTests
     }
 
     [Fact]
-    public async Task DisposeAsyncCanBeCalledMoreThanOnce()
+    public async Task DisposeAsyncCanBeCalledConcurrentlyAndRepeatedly()
     {
         await using var pool = new MemoryVariablePool();
         pool.Register(new[]
@@ -188,8 +188,37 @@ public sealed class CoreRuntimeTests
         var manager = new VariableSubscriptionManager(pool);
 
         await manager.SubscribeAsync(new[] { "temperature" });
+        var disposeCalls = Enumerable.Range(0, 8)
+            .Select(_ => manager.DisposeAsync().AsTask())
+            .ToArray();
+
+        await Task.WhenAll(disposeCalls);
         await manager.DisposeAsync();
-        await manager.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task VariableCanBeResubscribedImmediatelyAfterLastUnsubscribe()
+    {
+        await using var pool = new MemoryVariablePool();
+        pool.Register(new[]
+        {
+            new VariableMeta { VarId = "temperature", Name = "Temperature", InitialValue = 21, CycleMs = 20 }
+        });
+        await using var manager = new VariableSubscriptionManager(pool);
+        var received = 0;
+        using var consumer = manager.RegisterPollingConsumer(_ => Interlocked.Increment(ref received));
+
+        await manager.SubscribeAsync(new[] { "temperature" });
+        await Task.Delay(80);
+        Assert.True(Volatile.Read(ref received) > 0);
+
+        await manager.UnsubscribeAsync(new[] { "temperature" });
+        var countAfterUnsubscribe = Volatile.Read(ref received);
+        await manager.SubscribeAsync(new[] { "temperature" });
+        await Task.Delay(100);
+
+        Assert.True(Volatile.Read(ref received) > countAfterUnsubscribe);
+        await manager.UnsubscribeAsync(new[] { "temperature" });
     }
 
     [Fact]
