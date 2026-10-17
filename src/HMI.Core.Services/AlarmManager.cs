@@ -247,6 +247,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         ThrowIfDisposed();
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        (fromDate, toDate) = ValidateHistoryDateFilters(fromDate, toDate);
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
         var command = connection.CreateCommand();
@@ -284,6 +285,7 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         offset = Math.Clamp(offset, 0, int.MaxValue);
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        (fromDate, toDate) = ValidateHistoryDateFilters(fromDate, toDate);
         var result = new List<AlarmEventRecord>();
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
@@ -311,6 +313,26 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
             result.Add(ReadEvent(reader));
         return result;
+    }
+
+    private static (string? FromDate, string? ToDate) ValidateHistoryDateFilters(string? fromDate, string? toDate)
+    {
+        fromDate = string.IsNullOrWhiteSpace(fromDate) ? null : fromDate.Trim();
+        toDate = string.IsNullOrWhiteSpace(toDate) ? null : toDate.Trim();
+
+        static bool IsValidDate(string value) =>
+            DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+
+        if (fromDate is not null && !IsValidDate(fromDate))
+            throw new ArgumentException("开始日期必须使用 yyyy-MM-dd 格式且为有效日期。", nameof(fromDate));
+        if (toDate is not null && !IsValidDate(toDate))
+            throw new ArgumentException("结束日期必须使用 yyyy-MM-dd 格式且为有效日期。", nameof(toDate));
+        if (fromDate is not null && toDate is not null &&
+            DateOnly.ParseExact(fromDate, "yyyy-MM-dd", CultureInfo.InvariantCulture) >
+            DateOnly.ParseExact(toDate, "yyyy-MM-dd", CultureInfo.InvariantCulture))
+            throw new ArgumentException("开始日期不能晚于结束日期。", nameof(fromDate));
+
+        return (fromDate, toDate);
     }
 
     public async Task AcknowledgeAsync(string alarmId, CancellationToken ct = default)
