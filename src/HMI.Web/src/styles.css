@@ -40,3 +40,11 @@
 .driver-note svg{flex-shrink:0;margin-top:2px;color:#c6a1df}
 @media(max-width:900px){.driver-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.driver-page-heading{flex-direction:column}.driver-page-actions{width:100%}.driver-page-actions button{flex:1}}
 @media(max-width:520px){.driver-summary-grid{grid-template-columns:1fr}.driver-page{padding:22px 12px}.driver-page-heading h1{font-size:23px}}
+
+.alarm-history-filters{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:14px 20px;border-bottom:1px solid #243047;background:#101827}
+.alarm-history-filters label{display:flex;flex-direction:column;gap:6px;font-size:9px;color:#8294ac;min-width:0}
+.alarm-history-filters select,.alarm-history-filters input{min-width:180px;border:1px solid #344258;border-radius:7px;background:#0e1726;color:#dbe6f4;padding:9px 10px;font-size:10px;outline:none}
+.alarm-history-filters select:focus,.alarm-history-filters input:focus{border-color:#4e8c9a}
+.alarm-history-filters form{display:flex;align-items:flex-end;gap:8px;flex:1;justify-content:flex-end}
+.alarm-history-filters form label{flex:1;max-width:360px}
+@media(max-width:760px){.alarm-history-filters{align-items:stretch;flex-direction:column}.alarm-history-filters select,.alarm-history-filters input{width:100%;min-width:0}.alarm-history-filters form{flex-wrap:wrap;justify-content:stretch}.alarm-history-filters form label{flex-basis:100%;max-width:none}.alarm-history-filters form button{flex:1}}

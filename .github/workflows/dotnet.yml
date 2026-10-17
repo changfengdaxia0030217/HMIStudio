@@ -21,10 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: src/HMI.Web/package-lock.json
       - name: Build React/TypeScript frontend
         working-directory: src/HMI.Web
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -259,6 +261,14 @@ jobs:
               if ($eventTypes -contains "Triggered" -and $eventTypes -contains "Acknowledged" -and $eventTypes -contains "Recovered") { break }
             }
             if ($eventTypes -notcontains "Triggered" -or $eventTypes -notcontains "Acknowledged" -or $eventTypes -notcontains "Recovered") { throw "Alarm history is missing trigger, acknowledgement, or recovery events" }
+            $triggeredOnly = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20&eventType=Triggered" -TimeoutSec 5)
+            if ($triggeredOnly.Count -lt 1 -or @($triggeredOnly | Where-Object { $_.eventType -ne "Triggered" }).Count -gt 0) { throw "Alarm history event-type filtering returned unexpected events" }
+            $searchedHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20&search=target-speed-high" -TimeoutSec 5)
+            if ($searchedHistory.Count -lt 1 -or @($searchedHistory | Where-Object { $_.ruleId -ne "target-speed-high" }).Count -gt 0) { throw "Alarm history keyword search did not match the alarm rule" }
+            $filteredCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-filtered-alarm-history.csv"
+            Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high" -OutFile $filteredCsvPath -TimeoutSec 5
+            $filteredCsv = Get-Content -Path $filteredCsvPath -Raw
+            if ($filteredCsv -notmatch "Triggered" -or $filteredCsv -match "Acknowledged" -or $filteredCsv -notmatch "target-speed-high") { throw "Alarm history CSV did not preserve the selected filters" }
             $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })
             if ($activeAfterRecovery.Count -ne 0) { throw "Recovered alarm remains active: $(ConvertTo-Json -InputObject $activeAfterRecovery -Depth 5 -Compress)" }
             $invalidScreen = $screen | ConvertTo-Json -Depth 50 | ConvertFrom-Json
