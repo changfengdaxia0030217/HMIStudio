@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using System.Threading.Channels;
 using HMI.Core.Interface;
 using HMI.Core.Model;
+using HMI.Core.Services;
 using HMI.Server;
 
 var currentDirectory = Directory.GetCurrentDirectory();
@@ -98,6 +99,118 @@ app.MapGet("/api/backup", async (RuntimeProjectService runtime, CancellationToke
         catch (UnauthorizedAccessException) { }
     }
 });
+app.MapPost("/api/backup/inspect", async (IFormFile file, CancellationToken ct) =>
+{
+    const long maxBackupBytes = 25L * 1024 * 1024;
+    if (file.Length <= 0 || file.Length > maxBackupBytes)
+        return Results.BadRequest(new { ok = false, error = "备份文件为空或超过 25 MB 限制" });
+
+    var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"hmistudio-inspect-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(temporaryDirectory);
+    try
+    {
+        await using var upload = file.OpenReadStream();
+        using var archive = new ZipArchive(upload, ZipArchiveMode.Read, leaveOpen: false);
+        var manifestEntry = archive.GetEntry("manifest.json");
+        var projectEntries = archive.Entries
+            .Where(entry => entry.FullName.StartsWith("project/", StringComparison.Ordinal) &&
+                            entry.FullName.EndsWith(".hmijob", StringComparison.Ordinal) &&
+                            !entry.FullName["project/".Length..].Contains('/'))
+            .ToArray();
+        var alarmEntry = archive.GetEntry("data/alarms.sqlite");
+        if (manifestEntry is null || projectEntries.Length != 1)
+            return Results.BadRequest(new { ok = false, error = "备份包结构无效：必须包含 manifest.json 和唯一的 project/*.hmijob" });
+        if (manifestEntry.Length > 64 * 1024 || projectEntries[0].Length > 10 * 1024 * 1024 ||
+            (alarmEntry is not null && alarmEntry.Length > maxBackupBytes))
+            return Results.BadRequest(new { ok = false, error = "备份包中的文件超过允许大小" });
+
+        using var manifestStream = manifestEntry.Open();
+        using var manifestDocument = await JsonDocument.ParseAsync(manifestStream, cancellationToken: ct);
+        var manifest = manifestDocument.RootElement;
+        if (!manifest.TryGetProperty("product", out var product) || product.GetString() != "HMIStudio" ||
+            !manifest.TryGetProperty("backupFormatVersion", out var formatVersion) || formatVersion.GetInt32() != 1)
+            return Results.BadRequest(new { ok = false, error = "不支持的 HMIStudio 备份格式" });
+
+        var projectPath = Path.Combine(temporaryDirectory, "inspect.hmijob");
+        await using (var input = projectEntries[0].Open())
+        await using (var output = new FileStream(projectPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            await CopyWithLimitAsync(input, output, 10 * 1024 * 1024, ct);
+
+        var projectErrors = await new ProjectStorage().ValidateAsync(projectPath, ct);
+        HmiProject? project = null;
+        if (projectErrors.Count == 0)
+        {
+            var json = await File.ReadAllTextAsync(projectPath, ct);
+            project = HmiJson.Deserialize(json);
+        }
+
+        string? alarmDatabaseCheck = null;
+        if (alarmEntry is not null)
+        {
+            var alarmPath = Path.Combine(temporaryDirectory, "alarms.sqlite");
+            await using (var input = alarmEntry.Open())
+            await using (var output = new FileStream(alarmPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                await CopyWithLimitAsync(input, output, maxBackupBytes, ct);
+
+            await using var database = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = alarmPath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false
+            }.ToString());
+            await database.OpenAsync(ct);
+            await using var command = database.CreateCommand();
+            command.CommandText = "PRAGMA integrity_check;";
+            alarmDatabaseCheck = Convert.ToString(await command.ExecuteScalarAsync(ct));
+        }
+
+        var projectFileName = projectEntries[0].FullName["project/".Length..];
+        var valid = projectErrors.Count == 0 && (alarmEntry is null || alarmDatabaseCheck == "ok");
+        return Results.Ok(new
+        {
+            ok = valid,
+            backupFormatVersion = 1,
+            projectFile = projectFileName,
+            projectValid = projectErrors.Count == 0,
+            projectErrors,
+            screenCount = project?.Screens.Count ?? 0,
+            variableCount = project?.Variables.Count ?? 0,
+            startScreenId = project?.StartScreenId,
+            alarmHistoryIncluded = alarmEntry is not null,
+            alarmDatabaseIntegrity = alarmDatabaseCheck,
+            message = valid ? "备份包结构和内容校验通过；此操作未修改当前工程。" : "备份包校验未通过；当前工程未被修改。"
+        });
+    }
+    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or SqliteException or InvalidOperationException or ArgumentException)
+    {
+        return Results.BadRequest(new { ok = false, error = "无法读取备份包：" + ex.Message });
+    }
+    finally
+    {
+        try { Directory.Delete(temporaryDirectory, recursive: true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+}).DisableAntiforgery();
+
+static async Task CopyWithLimitAsync(Stream source, Stream destination, long maxBytes, CancellationToken ct)
+{
+    var buffer = new byte[81920];
+    long total = 0;
+    while (true)
+    {
+        var read = await source.ReadAsync(buffer, ct);
+        if (read == 0) break;
+        total += read;
+        if (total > maxBytes) throw new InvalidDataException("解压后的文件超过大小限制");
+        await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+    }
+}
+
 app.MapGet("/api/project/validate", async (RuntimeProjectService runtime, CancellationToken ct) =>
 {
     try
