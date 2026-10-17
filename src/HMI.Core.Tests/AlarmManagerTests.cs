@@ -178,6 +178,66 @@ public sealed class AlarmManagerTests
     }
 
     [Fact]
+    public async Task MultipleRulesForOneVariableMaintainIndependentLifecycles()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            await using var pool = CreatePool();
+            var rules = new[]
+            {
+                new AlarmRule
+                {
+                    Id = "temperature-warning",
+                    Name = "Temperature warning",
+                    VarId = "temperature",
+                    Operator = ">",
+                    Value = 80.0,
+                    Enabled = true
+                },
+                new AlarmRule
+                {
+                    Id = "temperature-critical",
+                    Name = "Temperature critical",
+                    VarId = "temperature",
+                    Operator = ">",
+                    Value = 90.0,
+                    Enabled = true
+                }
+            };
+            await using var alarms = await AlarmManager.CreateAsync(
+                pool, rules, Path.Combine(directory, "alarms.sqlite"));
+
+            Assert.True((await pool.WriteAsync("temperature", 95.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 2);
+
+            var activeAtPeak = await alarms.GetActiveAsync();
+            Assert.Equal(2, activeAtPeak.Count);
+            Assert.Equal(
+                new[] { "temperature-critical", "temperature-warning" },
+                activeAtPeak.Select(alarm => alarm.RuleId).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+
+            Assert.True((await pool.WriteAsync("temperature", 85.0)).Ok);
+            await WaitForHistoryCountAsync(alarms, 3);
+
+            var remaining = Assert.Single(await alarms.GetActiveAsync());
+            Assert.Equal("temperature-warning", remaining.RuleId);
+            var history = await alarms.GetHistoryAsync(10);
+            Assert.Equal(3, history.Count);
+            Assert.Equal(1, history.Count(item => item.EventType == "Recovered"));
+            Assert.Equal(2, history.Count(item => item.EventType == "Triggered"));
+            Assert.Single(history.Where(item =>
+                item.RuleId == "temperature-critical" && item.EventType == "Recovered"));
+            Assert.Single(history.Where(item =>
+                item.RuleId == "temperature-warning" && item.EventType == "Triggered"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task EnabledRuleWithUnknownVariableIsRejected()
     {
         var rule = CreateRules()[0];
