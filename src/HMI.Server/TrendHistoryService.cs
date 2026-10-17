@@ -107,7 +107,7 @@ public sealed class TrendHistoryService : IAsyncDisposable
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.GetString(3),
-                DateTimeOffset.Parse(timestampText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
+                DateTimeOffset.Parse(timestampText, CultureInfo.InvariantCulture, DateTimeStyles.None)));
         }
         samples.Reverse();
         return samples;
