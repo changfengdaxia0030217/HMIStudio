@@ -339,7 +339,7 @@ public sealed class CoreRuntimeTests
             Assert.Equal(projectPath, runtime.ProjectPath);
             Assert.Equal(expectedScreenIds, runtime.Project.Screens.Select(screen => screen.Id));
             Assert.Equal("lifecycle-check", runtime.Project.StartScreenId);
-            var reloadedScreen = Assert.Single(runtime.Project.Screens.Where(screen => screen.Id == "lifecycle-check"));
+            var reloadedScreen = Assert.Single(runtime.Project.Screens, screen => screen.Id == "lifecycle-check");
             Assert.Equal("Persisted lifecycle screen", reloadedScreen.Title);
             Assert.Equal("#123456", reloadedScreen.Background);
             Assert.Equal(originalVariableIds, runtime.Project.Variables.Select(variable => variable.VarId));
