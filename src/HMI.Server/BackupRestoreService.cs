@@ -178,27 +178,31 @@ public static class BackupRestoreService
         if (!File.Exists(statePath)) { Directory.Delete(rollback, true); return; }
         using var state = JsonDocument.Parse(await File.ReadAllTextAsync(statePath, ct));
         var root = state.RootElement;
-        if (root.GetProperty("projectExisted").GetBoolean())
+        var projectExisted = root.GetProperty("projectExisted").GetBoolean();
+        var alarmDatabaseWasTouched = root.GetProperty("alarmDatabaseWasTouched").GetBoolean();
+        var dbExisted = root.GetProperty("dbExisted").GetBoolean();
+        var originalProject = Path.Combine(rollback, "project.original");
+        var originalDatabase = Path.Combine(rollback, "alarms.original");
+
+        // Preflight every required backup before changing either live file. Otherwise a
+        // missing database backup could leave the project rolled back but the database
+        // in its partially-applied state.
+        if (projectExisted && !File.Exists(originalProject))
+            throw new InvalidDataException("恢复回滚失败：缺少原始工程备份，已保留回滚日志供人工恢复");
+        if (alarmDatabaseWasTouched && dbExisted && !File.Exists(originalDatabase))
+            throw new InvalidDataException("恢复回滚失败：缺少原始报警数据库备份，已保留回滚日志供人工恢复");
+
+        if (projectExisted)
+            await ReplaceFileAsync(originalProject, projectPath, ct);
+        else if (File.Exists(projectPath))
+            File.Delete(projectPath);
+
+        if (alarmDatabaseWasTouched)
         {
-            var original = Path.Combine(rollback, "project.original");
-            if (!File.Exists(original))
-                throw new InvalidDataException("恢复回滚失败：缺少原始工程备份，已保留回滚日志供人工恢复");
-            await ReplaceFileAsync(original, projectPath, ct);
-        }
-        else if (File.Exists(projectPath)) File.Delete(projectPath);
-        if (root.GetProperty("alarmDatabaseWasTouched").GetBoolean())
-        {
-            if (root.GetProperty("dbExisted").GetBoolean())
-            {
-                var original = Path.Combine(rollback, "alarms.original");
-                if (!File.Exists(original))
-                    throw new InvalidDataException("恢复回滚失败：缺少原始报警数据库备份，已保留回滚日志供人工恢复");
-                await ReplaceFileAsync(original, alarmPath, ct);
-            }
+            if (dbExisted)
+                await ReplaceFileAsync(originalDatabase, alarmPath, ct);
             else if (File.Exists(alarmPath))
-            {
                 File.Delete(alarmPath);
-            }
         }
         // If the restore payload did not include alarms, it never touched the live database.
         Directory.Delete(rollback, true);
