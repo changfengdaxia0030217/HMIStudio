@@ -236,8 +236,9 @@ public sealed class AlarmManagerTests
             await WaitForHistoryCountAsync(alarms, 1);
             var active = Assert.Single(await alarms.GetActiveAsync());
 
-            await alarms.AcknowledgeAsync(active.AlarmId);
-            await alarms.AcknowledgeAsync(active.AlarmId);
+            await Task.WhenAll(
+                alarms.AcknowledgeAsync(active.AlarmId),
+                alarms.AcknowledgeAsync(active.AlarmId));
 
             var history = await alarms.GetHistoryAsync(10);
             Assert.Equal(2, history.Count);
