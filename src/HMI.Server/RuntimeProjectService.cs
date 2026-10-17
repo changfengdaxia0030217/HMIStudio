@@ -15,6 +15,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
     private MemoryVariablePool? _pool;
     private VariableSubscriptionManager? _subscriptions;
     private AlarmManager? _alarms;
+    private TrendHistoryService? _trends;
     private HmiProject? _project;
     private DateTimeOffset _startedAt;
 
@@ -26,10 +27,12 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
     public string ProjectPath { get; private set; } = string.Empty;
     public string AlarmDatabasePath { get; private set; } = string.Empty;
+    public string TrendDatabasePath { get; private set; } = string.Empty;
     public HmiProject Project => _project ?? throw new InvalidOperationException("工程尚未加载");
     public MemoryVariablePool Pool => _pool ?? throw new InvalidOperationException("变量池尚未初始化");
     public VariableSubscriptionManager Subscriptions => _subscriptions ?? throw new InvalidOperationException("订阅服务尚未初始化");
     public IAlarmManager Alarms => _alarms ?? throw new InvalidOperationException("报警服务尚未初始化");
+    public TrendHistoryService Trends => _trends ?? throw new InvalidOperationException("趋势历史服务尚未初始化");
     public TimeSpan Uptime => DateTimeOffset.UtcNow - _startedAt;
 
     public MockPlcDriver? GetMockDriver(string protocol) => _drivers?.Resolve(protocol) as MockPlcDriver;
@@ -48,6 +51,7 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
                 ? Path.Combine(dataDirectory, "demo.hmijob")
                 : Path.GetFullPath(configuredPath);
             AlarmDatabasePath = Path.Combine(dataDirectory, "alarms.sqlite");
+            TrendDatabasePath = Path.Combine(dataDirectory, "trends.sqlite");
             await BackupRestoreService.ApplyPendingAsync(_environment.ContentRootPath, ProjectPath, AlarmDatabasePath, cancellationToken);
 
             var storage = new ProjectStorage();
@@ -70,6 +74,8 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
             _pool.Register(_project.Variables);
             _subscriptions = new VariableSubscriptionManager(_pool, ex => _logger.LogWarning(ex, "变量订阅消费者异常"));
             _alarms = await AlarmManager.CreateAsync(_pool, _project.AlarmRules, AlarmDatabasePath, cancellationToken, ex => _logger.LogError(ex, "报警事件处理失败"));
+            _trends = new TrendHistoryService(_pool, _project.Variables, TrendDatabasePath, _logger);
+            await _trends.StartAsync(cancellationToken);
             _startedAt = DateTimeOffset.UtcNow;
 
             _logger.LogInformation("HMIStudio 工程已加载: {ProjectPath}; variables={VariableCount}; screens={ScreenCount}",
@@ -127,10 +133,12 @@ public sealed class RuntimeProjectService : IHostedService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_trends is not null) await _trends.DisposeAsync();
         if (_alarms is not null) await _alarms.DisposeAsync();
         if (_subscriptions is not null) await _subscriptions.DisposeAsync();
         if (_pool is not null) await _pool.DisposeAsync();
         if (_drivers is not null) await _drivers.DisposeAsync();
+        _trends = null;
         _alarms = null;
         _subscriptions = null;
         _pool = null;
