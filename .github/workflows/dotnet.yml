@@ -295,6 +295,16 @@ jobs:
               catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rangeRejected = $true } else { throw } }
               if (-not $rangeRejected) { throw "Alarm history accepted an invalid date range: $badRange" }
             }
+            # All history endpoints must enforce the same date contract.
+            foreach ($endpoint in @("history/count?fromDate=not-a-date", "history.csv?toDate=2026-02-30")) {
+              $rangeRejected = $false
+              try { Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/$endpoint" -TimeoutSec 5 | Out-Null }
+              catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rangeRejected = $true } else { throw } }
+              if (-not $rangeRejected) { throw "Alarm endpoint accepted an invalid date filter: $endpoint" }
+            }
+            $trimmedDatePayload = (Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history?fromDate=%20$historyDate%20&toDate=%20$historyDate%20" -TimeoutSec 5).Content
+            $trimmedDateHistory = @(ConvertFrom-Json -InputObject $trimmedDatePayload)
+            if ($trimmedDateHistory.Count -lt 1) { throw "Alarm history API rejected otherwise-valid dates with surrounding whitespace" }
             $filteredCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-filtered-alarm-history.csv"
             Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high&fromDate=$historyDate&toDate=$historyDate" -OutFile $filteredCsvPath -TimeoutSec 5
             $filteredCsv = Get-Content -Path $filteredCsvPath -Raw
