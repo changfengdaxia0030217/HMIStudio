@@ -144,6 +144,44 @@ public sealed class BackupRestoreServiceTests
         }
     }
 
+    [Fact]
+    public async Task ApplyPendingPreservesJournalWhenOriginalAlarmBackupIsMissing()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var data = Path.Combine(root, "data");
+            var pending = Path.Combine(data, "restore-pending");
+            var rollback = Path.Combine(data, "restore-rollback");
+            Directory.CreateDirectory(pending);
+            Directory.CreateDirectory(rollback);
+            await File.WriteAllTextAsync(Path.Combine(rollback, "state.json"),
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    projectExisted = true,
+                    alarmDatabaseWasTouched = true,
+                    dbExisted = true
+                }));
+            var projectPath = Path.Combine(root, "project.hmijob");
+            await File.WriteAllTextAsync(projectPath, "partially-replaced-project");
+            await File.WriteAllTextAsync(Path.Combine(rollback, "project.original"), "original-project");
+            var alarmPath = Path.Combine(data, "alarms.sqlite");
+            await File.WriteAllTextAsync(alarmPath, "partially-replaced-database");
+
+            await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BackupRestoreService.ApplyPendingAsync(root, projectPath, alarmPath, CancellationToken.None));
+
+            Assert.Equal("original-project", await File.ReadAllTextAsync(projectPath));
+            Assert.Equal("partially-replaced-database", await File.ReadAllTextAsync(alarmPath));
+            Assert.True(File.Exists(Path.Combine(rollback, "state.json")));
+            Assert.True(Directory.Exists(pending));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "HMIStudio.Tests", Guid.NewGuid().ToString("N"));
