@@ -211,7 +211,9 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
     public async Task<int> GetHistoryCountAsync(
         CancellationToken ct = default,
         string? eventType = null,
-        string? search = null)
+        string? search = null,
+        string? fromDate = null,
+        string? toDate = null)
     {
         eventType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
@@ -226,10 +228,14 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                     coalesce(AlarmId, '') || ' ' || coalesce(RuleId, '') || ' ' ||
                     coalesce(RuleName, '') || ' ' || coalesce(VarId, '') || ' ' ||
                     coalesce(Message, '') || ' ' || coalesce(Value, '') || ' ' ||
-                    coalesce(Quality, '')), lower($search)) > 0);
+                    coalesce(Quality, '')), lower($search)) > 0)
+              AND ($fromDate IS NULL OR substr(OccurredAt, 1, 10) >= $fromDate)
+              AND ($toDate IS NULL OR substr(OccurredAt, 1, 10) <= $toDate);
             """;
         command.Parameters.AddWithValue("$eventType", (object?)eventType ?? DBNull.Value);
         command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
+        command.Parameters.AddWithValue("$fromDate", (object?)fromDate ?? DBNull.Value);
+        command.Parameters.AddWithValue("$toDate", (object?)toDate ?? DBNull.Value);
         var count = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return Convert.ToInt32(count, CultureInfo.InvariantCulture);
     }
@@ -239,7 +245,9 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
         CancellationToken ct = default,
         string? eventType = null,
         string? search = null,
-        int offset = 0)
+        int offset = 0,
+        string? fromDate = null,
+        string? toDate = null)
     {
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Clamp(offset, 0, int.MaxValue);
@@ -258,12 +266,16 @@ public sealed class AlarmManager : IAlarmManager, IAsyncDisposable
                     coalesce(RuleName, '') || ' ' || coalesce(VarId, '') || ' ' ||
                     coalesce(Message, '') || ' ' || coalesce(Value, '') || ' ' ||
                     coalesce(Quality, '')), lower($search)) > 0)
+              AND ($fromDate IS NULL OR substr(OccurredAt, 1, 10) >= $fromDate)
+              AND ($toDate IS NULL OR substr(OccurredAt, 1, 10) <= $toDate)
             ORDER BY Sequence DESC LIMIT $limit OFFSET $offset;
             """;
         command.Parameters.AddWithValue("$limit", limit);
         command.Parameters.AddWithValue("$offset", offset);
         command.Parameters.AddWithValue("$eventType", (object?)eventType ?? DBNull.Value);
         command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
+        command.Parameters.AddWithValue("$fromDate", (object?)fromDate ?? DBNull.Value);
+        command.Parameters.AddWithValue("$toDate", (object?)toDate ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
             result.Add(ReadEvent(reader));

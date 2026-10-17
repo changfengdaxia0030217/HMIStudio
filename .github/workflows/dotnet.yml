@@ -270,8 +270,21 @@ jobs:
             if ($firstHistoryPage.Count -ne 1 -or $secondHistoryPage.Count -ne 1 -or $firstHistoryPage[0].sequence -eq $secondHistoryPage[0].sequence) { throw "Alarm history offset pagination did not return distinct records" }
             $filteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?eventType=Triggered&search=target-speed-high" -TimeoutSec 5
             if ([int]$filteredCount -lt 1) { throw "Alarm history count did not respect the selected filters" }
+            $historyDate = ([DateTimeOffset]$alarmHistory[0].occurredAt).UtcDateTime.ToString("yyyy-MM-dd")
+            $dateFilteredHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?limit=20&fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5)
+            $dateFilteredCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=$historyDate&toDate=$historyDate" -TimeoutSec 5
+            if ($dateFilteredHistory.Count -lt 1 -or [int]$dateFilteredCount -ne $dateFilteredHistory.Count) { throw "Alarm history date-range results and count do not agree for $historyDate" }
+            $futureHistory = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5)
+            $futureCount = Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history/count?fromDate=2099-01-01&toDate=2099-12-31" -TimeoutSec 5
+            if ($futureHistory.Count -ne 0 -or [int]$futureCount -ne 0) { throw "Alarm history future date range should return no records" }
+            foreach ($badRange in @("fromDate=not-a-date", "fromDate=2026-10-18&toDate=2026-10-17")) {
+              $rangeRejected = $false
+              try { Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/history?$badRange" -TimeoutSec 5 | Out-Null }
+              catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rangeRejected = $true } else { throw } }
+              if (-not $rangeRejected) { throw "Alarm history accepted an invalid date range: $badRange" }
+            }
             $filteredCsvPath = Join-Path $env:RUNNER_TEMP "hmistudio-filtered-alarm-history.csv"
-            Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high" -OutFile $filteredCsvPath -TimeoutSec 5
+            Invoke-WebRequest "http://127.0.0.1:5081/api/alarms/history.csv?limit=1000&eventType=Triggered&search=target-speed-high&fromDate=$historyDate&toDate=$historyDate" -OutFile $filteredCsvPath -TimeoutSec 5
             $filteredCsv = Get-Content -Path $filteredCsvPath -Raw
             if ($filteredCsv -notmatch "Triggered" -or $filteredCsv -match "Acknowledged" -or $filteredCsv -notmatch "target-speed-high") { throw "Alarm history CSV did not preserve the selected filters" }
             $activeAfterRecovery = @(Invoke-RestMethod "http://127.0.0.1:5081/api/alarms/active" -TimeoutSec 5 | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.alarmId) })

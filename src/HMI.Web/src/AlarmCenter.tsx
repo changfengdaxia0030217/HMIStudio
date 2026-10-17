@@ -35,6 +35,8 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const [historyEventType, setHistoryEventType] = useState("");
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+  const [historyFromDate, setHistoryFromDate] = useState("");
+  const [historyToDate, setHistoryToDate] = useState("");
   const [historyPage, setHistoryPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -44,7 +46,12 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const filters = new URLSearchParams({ ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) });
+      const filters = new URLSearchParams({
+        ...(historyEventType ? { eventType: historyEventType } : {}),
+        ...(historySearch ? { search: historySearch } : {}),
+        ...(historyFromDate ? { fromDate: historyFromDate } : {}),
+        ...(historyToDate ? { toDate: historyToDate } : {}),
+      });
       const historyQuery = new URLSearchParams({ limit: "200", offset: String(historyPage * 200), ...Object.fromEntries(filters) });
       const [activeResponse, historyResponse, countResponse] = await Promise.all([
         fetch(`${API}/api/alarms/active`),
@@ -62,7 +69,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [historyEventType, historySearch, historyPage]);
+  }, [historyEventType, historySearch, historyFromDate, historyToDate, historyPage]);
 
   useEffect(() => {
     void load();
@@ -95,7 +102,7 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
         </div>
         <div className="alarm-page-actions">
           <button className="alarm-secondary-button" onClick={onBack}>返回运行总览</button>
-          <button className="alarm-secondary-button" onClick={() => { const query = new URLSearchParams({ limit: "1000", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}) }); window.location.href = `${API}/api/alarms/history.csv?${query}`; }}><Download size={14} />导出当前筛选 CSV</button>
+          <button className="alarm-secondary-button" onClick={() => { const query = new URLSearchParams({ limit: "1000", ...(historyEventType ? { eventType: historyEventType } : {}), ...(historySearch ? { search: historySearch } : {}), ...(historyFromDate ? { fromDate: historyFromDate } : {}), ...(historyToDate ? { toDate: historyToDate } : {}) }); window.location.href = `${API}/api/alarms/history.csv?${query}`; }}><Download size={14} />导出当前筛选 CSV</button>
           <button className="alarm-secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw size={14} />{loading ? "刷新中…" : "刷新"}</button>
         </div>
       </div>
@@ -123,19 +130,25 @@ export default function AlarmCenter({ onBack }: { onBack: () => void }) {
       </section>
 
       <section className="panel alarm-table-panel">
-        <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件</p></div><span className="table-count">{historyTotal} 条</span></div>
+        <div className="panel-heading"><div><h2>报警事件历史</h2><p>按发生时间倒序显示触发、确认与恢复事件；日期按 UTC 统计</p></div><span className="table-count">{historyTotal} 条</span></div>
         <div className="alarm-history-filters">
           <label>事件类型
             <select value={historyEventType} onChange={event => { setHistoryEventType(event.target.value); setHistoryPage(0); }}>
               <option value="">全部事件</option><option value="Triggered">触发</option><option value="Acknowledged">已确认</option><option value="Recovered">已恢复</option>
             </select>
           </label>
+          <label>开始日期（UTC）
+            <input type="date" value={historyFromDate} max={historyToDate || undefined} onChange={event => { setHistoryFromDate(event.target.value); setHistoryPage(0); }} />
+          </label>
+          <label>结束日期（UTC）
+            <input type="date" value={historyToDate} min={historyFromDate || undefined} onChange={event => { setHistoryToDate(event.target.value); setHistoryPage(0); }} />
+          </label>
           <form onSubmit={event => { event.preventDefault(); setHistorySearch(historySearchInput.trim()); setHistoryPage(0); }}>
             <label>关键词
               <input value={historySearchInput} onChange={event => setHistorySearchInput(event.target.value)} placeholder="报警名称、变量、消息…" />
             </label>
             <button className="alarm-secondary-button" type="submit">查询</button>
-            <button className="alarm-secondary-button" type="button" onClick={() => { setHistorySearchInput(""); setHistorySearch(""); setHistoryEventType(""); setHistoryPage(0); }}>清除</button>
+            <button className="alarm-secondary-button" type="button" onClick={() => { setHistorySearchInput(""); setHistorySearch(""); setHistoryEventType(""); setHistoryFromDate(""); setHistoryToDate(""); setHistoryPage(0); }}>清除</button>
           </form>
         </div>
         <div className="table-wrap"><table><thead><tr><th>序号</th><th>事件</th><th>报警名称</th><th>变量</th><th>记录值</th><th>质量</th><th>发生时间</th></tr></thead><tbody>

@@ -10,12 +10,16 @@ public interface IAlarmManager
     Task<int> GetHistoryCountAsync(
         CancellationToken ct = default,
         string? eventType = null,
-        string? search = null);
+        string? search = null,
+        string? fromDate = null,
+        string? toDate = null);
 
     Task<IReadOnlyList<AlarmEventRecord>> GetHistoryAsync(
         int limit = 100,
         CancellationToken ct = default,
         string? eventType = null,
         string? search = null,
-        int offset = 0);
+        int offset = 0,
+        string? fromDate = null,
+        string? toDate = null);
 }

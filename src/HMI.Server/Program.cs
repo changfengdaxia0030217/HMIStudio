@@ -384,15 +384,39 @@ app.MapPut("/api/screens/{screenId}", async (string screenId, HmiScreen screen, 
 app.MapGet("/api/alarms/active", async (RuntimeProjectService runtime, CancellationToken ct) =>
     Results.Ok(await runtime.Alarms.GetActiveAsync(ct)));
 
-app.MapGet("/api/alarms/history", async (int? limit, int? offset, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
-    Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search, offset ?? 0)));
-
-app.MapGet("/api/alarms/history/count", async (string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
-    Results.Ok(await runtime.Alarms.GetHistoryCountAsync(ct, eventType, search)));
-
-app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, string? search, RuntimeProjectService runtime, CancellationToken ct) =>
+static bool IsValidAlarmDateRange(string? fromDate, string? toDate)
 {
-    var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct, eventType, search);
+    const System.Globalization.DateTimeStyles styles = System.Globalization.DateTimeStyles.None;
+    var fromValid = string.IsNullOrWhiteSpace(fromDate) ||
+        DateOnly.TryParseExact(fromDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, styles, out _);
+    var toValid = string.IsNullOrWhiteSpace(toDate) ||
+        DateOnly.TryParseExact(toDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, styles, out _);
+    if (!fromValid || !toValid) return false;
+    if (!string.IsNullOrWhiteSpace(fromDate) && !string.IsNullOrWhiteSpace(toDate))
+        return DateOnly.ParseExact(fromDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) <=
+            DateOnly.ParseExact(toDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+    return true;
+}
+
+app.MapGet("/api/alarms/history", async (int? limit, int? offset, string? eventType, string? search, string? fromDate, string? toDate, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    if (!IsValidAlarmDateRange(fromDate, toDate))
+        return (IResult)Results.BadRequest(new { error = "日期格式必须为 yyyy-MM-dd，且开始日期不能晚于结束日期。" });
+    return Results.Ok(await runtime.Alarms.GetHistoryAsync(limit ?? 100, ct, eventType, search, offset ?? 0, fromDate, toDate));
+});
+
+app.MapGet("/api/alarms/history/count", async (string? eventType, string? search, string? fromDate, string? toDate, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    if (!IsValidAlarmDateRange(fromDate, toDate))
+        return (IResult)Results.BadRequest(new { error = "日期格式必须为 yyyy-MM-dd，且开始日期不能晚于结束日期。" });
+    return Results.Ok(await runtime.Alarms.GetHistoryCountAsync(ct, eventType, search, fromDate, toDate));
+});
+
+app.MapGet("/api/alarms/history.csv", async (int? limit, string? eventType, string? search, string? fromDate, string? toDate, RuntimeProjectService runtime, CancellationToken ct) =>
+{
+    if (!IsValidAlarmDateRange(fromDate, toDate))
+        return (IResult)Results.BadRequest(new { error = "日期格式必须为 yyyy-MM-dd，且开始日期不能晚于结束日期。" });
+    var events = await runtime.Alarms.GetHistoryAsync(Math.Clamp(limit ?? 1000, 1, 1000), ct, eventType, search, 0, fromDate, toDate);
     static string Csv(string? value) => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
     var csv = new StringBuilder();
     csv.AppendLine(string.Join(",", new[] { "Sequence", "AlarmId", "RuleId", "RuleName", "VarId", "EventType", "Message", "Value", "Quality", "OccurredAt" }.Select(Csv)));
